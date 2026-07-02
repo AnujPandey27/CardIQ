@@ -42,7 +42,20 @@ if('serviceWorker' in navigator){
   --amber:#f59e0b;--amber-bg:#1a1000;
   --red:#ef4444;--purple:#a78bfa;--cyan:#22d3ee;
   --gold:#d4a017;--gold-bg:#1a1200;
+  --shadow:0 8px 24px rgba(0,0,0,.5);
 }
+[data-theme="light"]{
+  --bg:#f5f5f9;--bg2:#ffffff;--bg3:#f0f0f6;--bg4:#e8e8f2;
+  --border:#e2e2ec;--border2:#d4d4e2;
+  --text:#1a1a2e;--text2:#54546b;--text3:#9494ab;
+  --accent:#5b5ef4;--accent2:#4b4ee0;--accent-bg:#ecedfe;
+  --green:#16a34a;--green-bg:#ecfdf3;--green-border:#bbf0cf;
+  --amber:#d97706;--amber-bg:#fef6e7;
+  --red:#dc2626;--purple:#8b5cf6;--cyan:#0891b2;
+  --gold:#b8860b;--gold-bg:#fdf6e3;
+  --shadow:0 8px 24px rgba(0,0,0,.12);
+}
+*{transition:background-color .25s ease,border-color .25s ease,color .25s ease}
 body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:13.5px;line-height:1.5}
 ::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
 
@@ -342,6 +355,57 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
   .mob-nav-item{min-width:46px;font-size:8px}
   .ph h1{font-size:1rem}
 }
+/* ── Theme toggle button ── */
+.theme-toggle{
+  position:fixed;top:14px;right:16px;z-index:950;
+  width:38px;height:38px;border-radius:50%;
+  background:var(--bg3);border:1px solid var(--border2);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;font-size:16px;
+  box-shadow:var(--shadow);
+  transition:transform .25s cubic-bezier(.34,1.56,.64,1),background .25s,border-color .25s;
+}
+.theme-toggle:active{transform:scale(.88) rotate(15deg)}
+.theme-toggle:hover{transform:scale(1.08)}
+@media(max-width:700px){.theme-toggle{top:10px;right:10px;width:34px;height:34px;font-size:14px}}
+
+/* ── Page transition (slide + fade) ── */
+.page-slide{animation:pageSlideIn .32s cubic-bezier(.22,1,.36,1)}
+@keyframes pageSlideIn{
+  from{opacity:0;transform:translateX(14px)}
+  to{opacity:1;transform:translateX(0)}
+}
+
+/* ── Tap ripple effect ── */
+.ripple-wrap{position:relative;overflow:hidden}
+.ripple{
+  position:absolute;border-radius:50%;
+  background:rgba(255,255,255,.35);
+  transform:scale(0);
+  animation:rippleAnim .5s ease-out;
+  pointer-events:none;
+}
+[data-theme="light"] .ripple{background:rgba(91,94,244,.18)}
+@keyframes rippleAnim{to{transform:scale(2.6);opacity:0}}
+
+/* ── Nav item active slide indicator ── */
+.nav-item{position:relative;overflow:hidden}
+.nav-item.active::before{
+  content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:var(--accent);border-radius:0 3px 3px 0;
+  animation:navBarIn .25s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes navBarIn{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+
+/* ── Smoother button/tile interactions ── */
+button,.card-tile,.fb,.store-icon-btn,.nav-item,.mob-nav-item{
+  transition:transform .12s cubic-bezier(.34,1.56,.64,1),background .15s,border-color .15s,box-shadow .15s,opacity .15s;
+}
+button:active:not(:disabled),.fb:active,.store-icon-btn:active,.mob-nav-item:active{transform:scale(.94)}
+.card-tile:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+.btn-p:hover,.btn-g:hover{transform:translateY(-1px)}
+.mob-nav-item.active{animation:navBounce .3s cubic-bezier(.34,1.56,.64,1)}
+@keyframes navBounce{0%{transform:scale(1)}40%{transform:scale(1.15)}100%{transform:scale(1)}}
 </style>
 </head>
 <body>
@@ -829,28 +893,51 @@ function _lk(){try{return JSON.parse(localStorage.getItem("ciq_fb_keys")||"{}");
 function _sk(k){try{localStorage.setItem("ciq_fb_keys",JSON.stringify(k));}catch(e){}}
 function _afb(){var k=_lk();return _AIFB.find(function(p){return k[p.id]&&k[p.id].trim();})||null;}
 
+async function _callGroq(key,prompt){
+  const r=await fetch("https://api.groq.com/openai/v1/chat/completions",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+key},body:JSON.stringify({model:"llama-3.3-70b-versatile",max_tokens:900,messages:[{role:"system",content:_AISYS},{role:"user",content:prompt}]})});
+  if(!r.ok)throw new Error("GROQ_"+r.status);
+  const d=await r.json();return d.choices[0].message.content;
+}
+async function _callGemini(key,prompt){
+  const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key="+key,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({systemInstruction:{parts:[{text:_AISYS}]},contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:900}})});
+  if(!r.ok)throw new Error("GEM_"+r.status);
+  const d=await r.json();return d.candidates[0].content.parts[0].text;
+}
 async function askAI(prompt,onChunk){
+  // 1. Built-in Anthropic API (free inside claude.ai)
   try{
     const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:900,system:_AISYS,messages:[{role:"user",content:prompt}]})});
     if(!r.ok)throw new Error("B"+r.status);
     const d=await r.json();
     const t=d&&d.content&&d.content[0]&&d.content[0].text;
     if(t){onChunk(t);return;}
-    throw new Error("Bempty");
   }catch(e){
     if(String(e.message).charAt(0)!=="B"&&!String(e.message).includes("fetch")){onChunk("AI error: "+e.message);return;}
   }
+  // 2. User-saved keys (via gear icon)
   const fb=_afb();
   if(fb){
     const key=_lk()[fb.id].trim();
     try{
-      var r,d;
-      if(fb.id==="groq"){r=await fetch("https://api.groq.com/openai/v1/chat/completions",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+key},body:JSON.stringify({model:"llama-3.3-70b-versatile",max_tokens:900,messages:[{role:"system",content:_AISYS},{role:"user",content:prompt}]})});if(!r.ok)throw new Error(""+r.status);d=await r.json();onChunk(d.choices[0].message.content);return;}
-      if(fb.id==="gemini"){r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key="+key,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({systemInstruction:{parts:[{text:_AISYS}]},contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:900}})});if(!r.ok)throw new Error(""+r.status);d=await r.json();onChunk(d.candidates[0].content.parts[0].text);return;}
-      if(fb.id==="openrouter"){r=await fetch("https://openrouter.ai/api/v1/chat/completions",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+key,"HTTP-Referer":"https://cardiq.app","X-Title":"CardIQ"},body:JSON.stringify({model:"meta-llama/llama-3.3-70b-instruct:free",max_tokens:900,messages:[{role:"system",content:_AISYS},{role:"user",content:prompt}]})});if(!r.ok)throw new Error(""+r.status);d=await r.json();onChunk(d.choices[0].message.content);return;}
-    }catch(err){onChunk((err.message.includes("401")||err.message.includes("403"))?"Key invalid — tap gear to update.":err.message.includes("429")?"Rate limit — try again shortly.":fb.label+": "+err.message);return;}
+      var txt;
+      if(fb.id==="groq")txt=await _callGroq(key,prompt);
+      else if(fb.id==="gemini")txt=await _callGemini(key,prompt);
+      else if(fb.id==="openrouter"){
+        const r=await fetch("https://openrouter.ai/api/v1/chat/completions",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+key,"HTTP-Referer":"https://cardiq.app","X-Title":"CardIQ"},body:JSON.stringify({model:"meta-llama/llama-3.3-70b-instruct:free",max_tokens:900,messages:[{role:"system",content:_AISYS},{role:"user",content:prompt}]})});
+        if(!r.ok)throw new Error("OR_"+r.status);
+        const d=await r.json();txt=d.choices[0].message.content;
+      }
+      if(txt){onChunk(txt);return;}
+    }catch(err){
+      const m=String(err.message);
+      if(m.includes("401")||m.includes("403"))onChunk("🔑 API key invalid or expired. Tap ⚙️ to update.");
+      else if(m.includes("429"))onChunk("⏳ Rate limit reached. Wait a moment and try again.");
+      else onChunk("⚠️ "+fb.label+" error: "+m);
+      return;
+    }
   }
-  onChunk("CardIQ AI is free inside claude.ai.\n\nFor the downloaded file tap the gear icon to add a free key:\n• Groq — console.groq.com/keys\n• Gemini — aistudio.google.com/apikey");
+  // 3. Nothing worked
+  onChunk("ℹ️ CardIQ AI works free inside claude.ai.\n\nFor the downloaded file, tap ⚙️ (gear icon) next to \"CardIQ AI\" to add a free API key:\n\n• Groq (fastest, free) — console.groq.com/keys\n• Google Gemini (free) — aistudio.google.com/apikey\n• OpenRouter (free models) — openrouter.ai/keys");
 }
 
 function AISettingsModal({onClose}){
@@ -965,32 +1052,6 @@ function AddCardModal({card:ec,onClose,onSave}){
     )
   );
 }
-
-function AISearch({placeholder,context,cards}){
-  const[q,setQ]=useState("");const[res,setRes]=useState("");const[loading,setLoading]=useState(false);
-  const myCards=cards.map(c=>c.cardName).join(", ");
-  async function ask(){
-    if(!q.trim())return;
-    setLoading(true);setRes("");
-    const fullPrompt=`User's cards: ${myCards}. Context: ${context}. Question: ${q}`;
-    try{await askAI(fullPrompt,(chunk)=>setRes(p=>p+chunk));}
-    catch(e){setRes("Unable to fetch AI response. Please try again.");}
-    setLoading(false);
-  }
-  return React.createElement("div",{className:"ai-box mb2"},
-    React.createElement("div",{className:"ai-query"},
-      React.createElement("div",{className:"row"},React.createElement("span",{style:{fontSize:"16px"}},"✨"),React.createElement("span",{style:{fontSize:"12.5px",color:"var(--accent2)",fontWeight:"600"}},"CardIQ AI"),React.createElement("span",{className:"live-dot",style:{marginLeft:"auto"}})),
-      React.createElement("div",{className:"ai-query-row",style:{marginTop:"8px"}},
-        React.createElement("input",{placeholder,value:q,onChange:e=>setQ(e.target.value),onKeyDown:e=>e.key==="Enter"&&ask()}),
-        React.createElement("button",{className:"btn-p",onClick:ask,disabled:loading,style:{whiteSpace:"nowrap",padding:"8px 14px",fontSize:"12px"}},loading?React.createElement("div",{className:"spin"}):Ask+" ↗")
-      )
-    ),
-    (loading||res)&&React.createElement("div",{className:"ai-results"},
-      loading&&!res?React.createElement("div",{className:"ai-loading"},React.createElement("div",{className:"ai-dot"}),React.createElement("div",{className:"ai-dot"}),React.createElement("div",{className:"ai-dot"}),React.createElement("span",null,"Fetching latest deals...")):res
-    )
-  );
-}
-const Ask="Ask";
 
 /* ─────────────────── PAGES ─────────────────── */
 
@@ -2217,10 +2278,45 @@ const DEFAULT_REDEMPTION = [
 // All cards in CARD_DB for search
 const ALL_KNOWN_CARDS = Object.keys(CARD_DB).map(name=>({name, bank:CARD_DB[name].bank, net:CARD_DB[name].net, pv:CARD_DB[name].pv}));
 
+const TRANSFER_PARTNERS = {
+  "HDFC Infinia": [
+    {partner:"Air India Maharaja Club",type:"Airline",ratio:"1:1",icon:"✈️",desc:"1 RP = 1 Air India mile. Good for domestic + Star Alliance redemptions.",valuePerPt:0.65,minTransfer:2000},
+    {partner:"Singapore Airlines KrisFlyer",type:"Airline",ratio:"2:1",icon:"✈️",desc:"2 RP = 1 KrisFlyer mile. Best for premium cabin international awards.",valuePerPt:0.90,minTransfer:5000},
+    {partner:"InterMiles",type:"Airline",ratio:"1:1",icon:"✈️",desc:"1 RP = 1 InterMile. Wide redemption across 700+ Jet partners.",valuePerPt:0.55,minTransfer:1000},
+    {partner:"Marriott Bonvoy",type:"Hotel",ratio:"1:1",icon:"🏨",desc:"1 RP = 1 Bonvoy point. Strong for luxury hotel redemptions in India.",valuePerPt:0.50,minTransfer:2000},
+  ],
+  "HDFC Regalia Gold": [
+    {partner:"InterMiles",type:"Airline",ratio:"1:0.5",icon:"✈️",desc:"2 RP = 1 InterMile. Standard transfer rate.",valuePerPt:0.40,minTransfer:1000},
+    {partner:"Air India Maharaja Club",type:"Airline",ratio:"1:0.5",icon:"✈️",desc:"2 RP = 1 Air India mile.",valuePerPt:0.38,minTransfer:2000},
+  ],
+  "Amex MRCC": [
+    {partner:"Singapore Airlines KrisFlyer",type:"Airline",ratio:"1:0.5",icon:"✈️",desc:"2 MR = 1 KrisFlyer mile. Premium choice for Business/First redemptions on SQ.",valuePerPt:1.10,minTransfer:5000},
+    {partner:"British Airways Avios",type:"Airline",ratio:"1:1",icon:"✈️",desc:"1 MR = 1 Avios. Excellent for short-haul oneworld redemptions.",valuePerPt:1.20,minTransfer:1000},
+    {partner:"Marriott Bonvoy",type:"Hotel",ratio:"1:3",icon:"🏨",desc:"1 MR = 3 Bonvoy points. Strong multiplier — best for 5-star hotel stays.",valuePerPt:0.90,minTransfer:1000},
+    {partner:"Air India Maharaja Club",type:"Airline",ratio:"1:1",icon:"✈️",desc:"1 MR = 1 Air India mile.",valuePerPt:0.85,minTransfer:1000},
+    {partner:"InterMiles",type:"Airline",ratio:"1:1",icon:"✈️",desc:"1 MR = 1 InterMile.",valuePerPt:0.80,minTransfer:1000},
+    {partner:"Hilton Honors",type:"Hotel",ratio:"1:2",icon:"🏨",desc:"1 MR = 2 Hilton points.",valuePerPt:0.60,minTransfer:1000},
+  ],
+  "Axis Magnus": [
+    {partner:"Singapore Airlines KrisFlyer",type:"Airline",ratio:"5:4",icon:"✈️",desc:"5 EDGE Reward = 4 KrisFlyer miles. One of the best transfer rates in India.",valuePerPt:1.00,minTransfer:2000},
+    {partner:"Marriott Bonvoy",type:"Hotel",ratio:"5:4",icon:"🏨",desc:"5 EDGE Reward = 4 Bonvoy points.",valuePerPt:0.80,minTransfer:2000},
+    {partner:"Air India Maharaja Club",type:"Airline",ratio:"5:4",icon:"✈️",desc:"5 EDGE Reward = 4 Air India miles.",valuePerPt:0.75,minTransfer:2000},
+    {partner:"Accor Le Club ALL",type:"Hotel",ratio:"5:2",icon:"🏨",desc:"5 EDGE Reward = 2 Accor points. For Sofitel, Novotel, ibis stays.",valuePerPt:0.55,minTransfer:2000},
+  ],
+  "Yes Bank Marquee": [
+    {partner:"Multiple airline & hotel partners",type:"Airline/Hotel",ratio:"1:1",icon:"✈️",desc:"1 Reward Point = 1 partner mile/point across 12+ programs.",valuePerPt:0.70,minTransfer:1000},
+  ],
+};
+
+// Generic fallback for cards with no dedicated transfer partners (most cashback/value cards)
+const NO_TRANSFER_MSG = "This card's rewards don't support point transfers to airline or hotel partners. Redeem directly via the Rewards tab for the best value — typically vouchers or statement credit.";
+
+
 function RewardsPage({cards}){
   const[selCardId,setSelCardId]=useState(cards.length>0?cards[0].id:"__search__");
   const[searchQ,setSearchQ]=useState("");
   const[searchCard,setSearchCard]=useState(null);
+  const[rTab,setRTab]=useState("redeem");
   const el=(t,p,...ch)=>React.createElement(t,p,...ch);
 
   // Filtered search results
@@ -2239,6 +2335,60 @@ function RewardsPage({cards}){
   const pv = d ? d.pv : 0.25;
   const redemptions = REDEMPTION_OPTIONS[activeCardName] || DEFAULT_REDEMPTION;
   const bestRedemption = redemptions.reduce((a,b)=>b.value>a.value?b:a, redemptions[0]);
+
+  function renderTransferPartners(){
+    if(!activeCard) return el("div",{className:"empty"},el("div",{className:"empty-icon"},"✈️"),el("p",null,"Search for a card above to see transfer partners"));
+    const partners = TRANSFER_PARTNERS[activeCardName];
+    if(!partners || partners.length===0){
+      return el("div",{className:"empty"},
+        el("div",{className:"empty-icon"},"🔄"),
+        el("p",null,NO_TRANSFER_MSG)
+      );
+    }
+    const sorted = [...partners].sort((a,b)=>b.valuePerPt-a.valuePerPt);
+    const best = sorted[0];
+    return el("div",null,
+      el("div",{className:"section-head",style:{marginBottom:"8px"}},"🔄 Transfer partners — "+activeCard.cardName),
+      el("div",{style:{background:"var(--green-bg)",border:"1px solid var(--green-border)",borderRadius:"8px",padding:"9px 14px",marginBottom:"1rem",fontSize:"13px",color:"#6ee7b7"}},
+        "💡 Best transfer: ",el("strong",null,best.partner),
+        " at ₹"+best.valuePerPt.toFixed(2)+" effective value per point",
+        pts>0&&el("span",null," — your "+fmt(pts)+" pts ≈ ₹"+fmt(Math.round(pts*best.valuePerPt))+" if transferred")
+      ),
+      el("div",{style:{display:"flex",flexDirection:"column",gap:"8px"}},
+        sorted.map((p,i)=>
+          el("div",{key:i,style:{
+            background:i===0?"rgba(34,197,94,.07)":"var(--bg3)",
+            border:"1px solid "+(i===0?"var(--green-border)":"var(--border)"),
+            borderRadius:"9px",padding:"12px 14px",
+            display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"12px"
+          }},
+            el("div",{style:{flex:1}},
+              el("div",{style:{display:"flex",alignItems:"center",gap:"7px",marginBottom:"4px",flexWrap:"wrap"}},
+                el("span",{style:{fontSize:"15px"}},p.icon),
+                el("span",{style:{fontSize:"13.5px",fontWeight:"600",color:i===0?"#6ee7b7":"var(--text)"}},p.partner),
+                el("span",{className:"badge "+(p.type.includes("Hotel")?"b-purple":"b-amber"),style:{margin:0,fontSize:"10px"}},p.type),
+                i===0&&el("span",{className:"badge b-green",style:{margin:0,fontSize:"10px"}},"BEST VALUE")
+              ),
+              el("div",{style:{fontSize:"12px",color:"var(--text2)",lineHeight:"1.5"}},p.desc),
+              el("div",{style:{fontSize:"11px",color:"var(--text3)",marginTop:"4px"}},
+                "Transfer ratio: ",el("strong",null,p.ratio)," · Min transfer: ",fmt(p.minTransfer)+" pts"
+              ),
+              pts>0&&el("div",{style:{fontSize:"11.5px",color:"var(--purple)",marginTop:"4px"}},
+                pts>=p.minTransfer
+                  ? "Your "+fmt(pts)+" pts ≈ ₹"+fmt(Math.round(pts*p.valuePerPt))+" effective value via this partner"
+                  : "Need "+fmt(p.minTransfer-pts)+" more pts to reach minimum transfer"
+              )
+            ),
+            el("div",{style:{textAlign:"right",flexShrink:0}},
+              el("div",{style:{fontSize:"1.2rem",fontWeight:"800",color:i===0?"#6ee7b7":"var(--accent2)"}},"₹"+p.valuePerPt.toFixed(2)),
+              el("div",{style:{fontSize:"10.5px",color:"var(--text3)"}},"effective/pt")
+            )
+          )
+        )
+      ),
+      el("div",{className:"note",style:{marginTop:"1rem"}},"💡 Transfer values fluctuate with airline/hotel award charts and bank promotions. Always verify current rates before transferring — transfers are usually irreversible.")
+    );
+  }
 
   function renderCardSummary(){
     if(!activeCard) return el("div",{className:"empty"},el("div",{className:"empty-icon"},"🔍"),el("p",null,"Search for a card above to see its redemption options"));
@@ -2365,8 +2515,21 @@ function RewardsPage({cards}){
       )
     ),
 
+    // Tab switcher: Redeem vs Transfer Partners
+    activeCard && el("div",{style:{display:"flex",gap:"4px",borderBottom:"1px solid var(--border)",marginBottom:"1.2rem"}},
+      [{id:"redeem",label:"Redeem Options",icon:"🎁"},{id:"transfer",label:"Transfer Partners",icon:"🔄"}].map(t=>
+        el("button",{key:t.id,onClick:()=>setRTab(t.id),style:{
+          padding:"8px 16px",background:"none",border:"none",
+          borderBottom:rTab===t.id?"2px solid var(--accent)":"2px solid transparent",
+          color:rTab===t.id?"var(--accent2)":"var(--text2)",
+          fontWeight:rTab===t.id?"600":"400",fontSize:"13px",cursor:"pointer",
+          fontFamily:"inherit",marginBottom:"-1px",display:"flex",alignItems:"center",gap:"5px"
+        }},t.icon," ",t.label)
+      )
+    ),
+
     // Main card detail
-    renderCardSummary()
+    rTab==="redeem" ? renderCardSummary() : renderTransferPartners()
   );
 }
 
@@ -2980,6 +3143,77 @@ function ProfileModal({user,onSave,onLogout,onClose}){
   );
 }
 
+/* ── Tap sound (Web Audio API — no files, works offline) ── */
+let _actx=null;
+function _getActx(){
+  if(_actx) return _actx;
+  try{ _actx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ _actx=null; }
+  return _actx;
+}
+function playTapSound(){
+  try{
+    const ctx=_getActx();
+    if(!ctx) return;
+    if(ctx.state==="suspended") ctx.resume();
+    const osc=ctx.createOscillator();
+    const gain=ctx.createGain();
+    osc.type="sine";
+    osc.frequency.setValueAtTime(720,ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(420,ctx.currentTime+0.07);
+    gain.gain.setValueAtTime(0.07,ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+0.09);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(ctx.currentTime); osc.stop(ctx.currentTime+0.1);
+  }catch(e){}
+}
+
+/* ── Global tap handler: plays sound + spawns ripple on any button/clickable ── */
+function _attachGlobalTapFx(){
+  document.addEventListener("pointerdown",function(e){
+    const target=e.target.closest("button,.card-tile,.nav-item,.mob-nav-item,.fb,.store-icon-btn,a.buy-btn");
+    if(!target) return;
+    // Respect mute preference
+    if(localStorage.getItem("ciq_sound")!=="off") playTapSound();
+    // Ripple
+    try{
+      const rect=target.getBoundingClientRect();
+      target.classList.add("ripple-wrap");
+      const r=document.createElement("span");
+      r.className="ripple";
+      const size=Math.max(rect.width,rect.height);
+      r.style.width=r.style.height=size+"px";
+      r.style.left=(e.clientX-rect.left-size/2)+"px";
+      r.style.top=(e.clientY-rect.top-size/2)+"px";
+      target.appendChild(r);
+      setTimeout(function(){ if(r.parentNode) r.parentNode.removeChild(r); },520);
+    }catch(err){}
+  },{passive:true});
+}
+if(typeof window!=="undefined") _attachGlobalTapFx();
+
+/* ── Theme management ── */
+function _getTheme(){ try{ return localStorage.getItem("ciq_theme")||"dark"; }catch(e){ return "dark"; } }
+function _setThemeDOM(t){
+  try{ document.documentElement.setAttribute("data-theme", t==="light"?"light":"dark"); }catch(e){}
+}
+_setThemeDOM(_getTheme()); // apply immediately on load (before React mounts) to avoid flash
+
+function ThemeToggle(){
+  const[theme,setTheme]=useState(_getTheme());
+  function toggle(){
+    const next = theme==="light" ? "dark" : "light";
+    setTheme(next);
+    _setThemeDOM(next);
+    try{ localStorage.setItem("ciq_theme", next); }catch(e){}
+  }
+  return React.createElement("button",{
+    className:"theme-toggle",
+    onClick:toggle,
+    title: theme==="light" ? "Switch to dark mode" : "Switch to light mode",
+    "aria-label":"Toggle theme"
+  }, theme==="light" ? "🌙" : "☀️");
+}
+
 function App(){
   const[user,setUser]=useState(null);
   const[page,setPage]=useState("cards");
@@ -3041,7 +3275,7 @@ function App(){
     React.createElement("div",{className:"spin",style:{marginRight:"10px"}}),
     "Loading "+APP_NAME+"..."
   );
-  if(!user)return React.createElement(AuthModal,{onLogin:handleLogin});
+  if(!user)return React.createElement(React.Fragment,null,React.createElement(ThemeToggle,null),React.createElement(AuthModal,{onLogin:handleLogin}));
 
   return React.createElement("div",{className:"app"},
     React.createElement("div",{className:"sidebar"},
@@ -3070,19 +3304,22 @@ function App(){
         React.createElement("span",{className:"mni"},"👤"),"Me"
       )
     ),
+    React.createElement(ThemeToggle,null),
     React.createElement("div",{className:"main"},
-      page==="cards"&&React.createElement(CardsPage,{cards,onAdd:()=>setSA(true),onEdit:c=>setEC(c),onDelete:delCard}),
-      page==="shop"&&React.createElement(ShopPage,{cards}),
-      page==="subs"&&React.createElement(SubscriptionsPage,{cards}),
-      page==="giftcards"&&React.createElement(GiftCardsPage,{cards}),
-      page==="movies"&&React.createElement(MoviePage,{cards}),
-      page==="premium"&&React.createElement(PremiumPage,{cards}),
-      page==="travel"&&React.createElement(TravelPage,{cards}),
-      page==="compare"&&React.createElement(CompareCardsPage,{cards,onSwitchTab:setPage}),
-      page==="discover"&&React.createElement(DiscoverPage,{cards,onSwitchTab:setPage}),
-      page==="calc"&&React.createElement(PriceCalculatorPage,{cards}),
-      page==="emi"&&React.createElement(EMIPage,{cards}),
-      page==="rewards"&&React.createElement(RewardsPage,{cards})
+      React.createElement("div",{key:page,className:"page-slide"},
+        page==="cards"&&React.createElement(CardsPage,{cards,onAdd:()=>setSA(true),onEdit:c=>setEC(c),onDelete:delCard}),
+        page==="shop"&&React.createElement(ShopPage,{cards}),
+        page==="subs"&&React.createElement(SubscriptionsPage,{cards}),
+        page==="giftcards"&&React.createElement(GiftCardsPage,{cards}),
+        page==="movies"&&React.createElement(MoviePage,{cards}),
+        page==="premium"&&React.createElement(PremiumPage,{cards}),
+        page==="travel"&&React.createElement(TravelPage,{cards}),
+        page==="compare"&&React.createElement(CompareCardsPage,{cards,onSwitchTab:setPage}),
+        page==="discover"&&React.createElement(DiscoverPage,{cards,onSwitchTab:setPage}),
+        page==="calc"&&React.createElement(PriceCalculatorPage,{cards}),
+        page==="emi"&&React.createElement(EMIPage,{cards}),
+        page==="rewards"&&React.createElement(RewardsPage,{cards})
+      )
     ),
     (showAdd||editCard)&&React.createElement(AddCardModal,{card:editCard,onClose:()=>{setSA(false);setEC(null)},onSave:editCard?saveEdit:addCard}),
     showProfile&&React.createElement(ProfileModal,{user,onSave:handleProfileSave,onLogout:handleLogout,onClose:()=>setSP(false)})
