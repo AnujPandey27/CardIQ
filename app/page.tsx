@@ -1,303 +1,225 @@
-"use client";
-
-import { useState } from "react";
-
-type Card = {
-  id: number;
-  name: string;
-  bank: string;
-  network: string;
-  variant: string;
-  reward: string;
-  color: string;
-};
-
-const cards: Card[] = [
-  {
-    id: 1,
-    name: "HDFC Infinia",
-    bank: "HDFC Bank",
-    network: "Visa",
-    variant: "Infinia Metal",
-    reward: "3.3%+",
-    color: "bg-slate-900",
-  },
-  {
-    id: 2,
-    name: "Axis Atlas",
-    bank: "Axis Bank",
-    network: "Visa",
-    variant: "Atlas",
-    reward: "2%+",
-    color: "bg-blue-700",
-  },
-  {
-    id: 3,
-    name: "Amex MRCC",
-    bank: "American Express",
-    network: "Amex",
-    variant: "Membership Rewards",
-    reward: "1%+",
-    color: "bg-sky-600",
-  },
-];
-
-const quickActions = [
-  {
-    title: "Best Card",
-    description: "Find the best card for a purchase",
-    icon: "✦",
-  },
-  {
-    title: "Add Card",
-    description: "Add a card to your portfolio",
-    icon: "+",
-  },
-  {
-    title: "Track Spend",
-    description: "Record a purchase or payment",
-    icon: "↗",
-  },
-  {
-    title: "Explore",
-    description: "Discover cards and benefits",
-    icon: "⌕",
-  },
-];
-
 export default function Home() {
-  const [activeTab, setActiveTab] = useState("Overview");
-
   return (
     <main className="min-h-screen bg-[#f7f8fa] text-slate-900">
       {/* Navigation */}
-      <nav className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 lg:px-8">
-          <div className="flex items-center gap-10">
-            <div className="text-xl font-bold tracking-tight">CardIQ</div>
-
-            <div className="hidden items-center gap-7 text-sm font-medium text-slate-500 md:flex">
-              {["Overview", "My Cards", "Rewards", "Discover"].map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`transition ${
-                    activeTab === tab
-                      ? "text-slate-900"
-                      : "hover:text-slate-900"
-                  }`}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+          <div className="text-2xl font-bold tracking-tight">
+            CardIQ
           </div>
 
-          <button className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">
-            + Add Card
-          </button>
-        </div>
-      </nav>
+          <nav className="hidden items-center gap-8 text-sm font-medium text-slate-600 md:flex">
+            <a href="#features" className="hover:text-slate-900">
+              Features
+            </a>
+            <a href="#how-it-works" className="hover:text-slate-900">
+              How it works
+            </a>
+            <a href="#about" className="hover:text-slate-900">
+              About
+            </a>
+          </nav>
 
-      {/* Main */}
-      <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8 lg:py-10">
-        {/* Welcome */}
-        <section className="mb-8">
-          <p className="mb-2 text-sm font-medium text-slate-500">
-            Your credit card companion
+          <div className="flex items-center gap-3">
+            <a
+              href="/login"
+              className="rounded-xl px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+            >
+              Log in
+            </a>
+
+            <a
+              href="/signup"
+              className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+            >
+              Sign up
+            </a>
+          </div>
+        </div>
+      </header>
+
+      {/* Hero */}
+      <section className="mx-auto max-w-6xl px-6 pb-20 pt-20 md:pt-28">
+        <div className="max-w-3xl">
+          <div className="mb-6 inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm">
+            Smarter credit card decisions
+          </div>
+
+          <h1 className="text-5xl font-bold tracking-tight text-slate-950 md:text-7xl">
+            Make every card spend count.
+          </h1>
+
+          <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600 md:text-xl">
+            CardIQ helps you manage your credit cards, choose the right card
+            for every purchase, and track the rewards and benefits you earn.
           </p>
 
-          <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                Make every card spend count.
-              </h1>
+          <div className="mt-8 flex flex-wrap gap-4">
+            <a
+              href="/signup"
+              className="rounded-xl bg-slate-900 px-6 py-3.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800"
+            >
+              Get started →
+            </a>
 
-              <p className="mt-3 max-w-2xl text-base leading-7 text-slate-500">
-                Manage your cards, find the right card for every purchase,
-                discover better opportunities, and track the rewards you earn.
+            <a
+              href="#features"
+              className="rounded-xl border border-slate-300 bg-white px-6 py-3.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Explore CardIQ
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* Features */}
+      <section
+        id="features"
+        className="border-y border-slate-200 bg-white"
+      >
+        <div className="mx-auto max-w-6xl px-6 py-20">
+          <div className="max-w-2xl">
+            <p className="text-sm font-semibold uppercase tracking-wider text-slate-500">
+              One place for your cards
+            </p>
+
+            <h2 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">
+              Everything you need to get more from your cards.
+            </h2>
+
+            <p className="mt-4 text-lg leading-8 text-slate-600">
+              Build your card portfolio, find the best card for a purchase,
+              track spending and discover rewards opportunities.
+            </p>
+          </div>
+
+          <div className="mt-12 grid gap-6 md:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-7">
+              <div className="text-2xl">✦</div>
+              <h3 className="mt-5 text-xl font-semibold">
+                Best Card
+              </h3>
+              <p className="mt-3 leading-7 text-slate-600">
+                Tell CardIQ what you are buying and find the card that can
+                provide the best available value.
               </p>
             </div>
 
-            <button className="hidden rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold shadow-sm transition hover:border-slate-300 hover:bg-slate-50 md:block">
-              View insights →
-            </button>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-7">
+              <div className="text-2xl">＋</div>
+              <h3 className="mt-5 text-xl font-semibold">
+                Card Portfolio
+              </h3>
+              <p className="mt-3 leading-7 text-slate-600">
+                Keep your credit cards organized in one place with their
+                rewards, networks and key benefits.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-7">
+              <div className="text-2xl">↗</div>
+              <h3 className="mt-5 text-xl font-semibold">
+                Rewards Tracking
+              </h3>
+              <p className="mt-3 leading-7 text-slate-600">
+                Track purchases and understand the value you are earning from
+                your credit card portfolio.
+              </p>
+            </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* Best Card */}
-        <section className="mb-8 overflow-hidden rounded-2xl bg-slate-900 p-6 text-white shadow-sm sm:p-8">
-          <div className="flex flex-col justify-between gap-7 lg:flex-row lg:items-center">
-            <div className="max-w-xl">
-              <div className="mb-3 inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-slate-200">
-                CardIQ Recommendation
+      {/* How it works */}
+      <section id="how-it-works">
+        <div className="mx-auto max-w-6xl px-6 py-20">
+          <div className="max-w-2xl">
+            <p className="text-sm font-semibold uppercase tracking-wider text-slate-500">
+              How it works
+            </p>
+
+            <h2 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">
+              A smarter way to use your cards.
+            </h2>
+          </div>
+
+          <div className="mt-12 grid gap-8 md:grid-cols-3">
+            <div>
+              <div className="text-sm font-semibold text-slate-500">
+                01
               </div>
+              <h3 className="mt-3 text-xl font-semibold">
+                Add your cards
+              </h3>
+              <p className="mt-3 leading-7 text-slate-600">
+                Build your personal credit card portfolio.
+              </p>
+            </div>
 
-              <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-                Which card should you use?
+            <div>
+              <div className="text-sm font-semibold text-slate-500">
+                02
+              </div>
+              <h3 className="mt-3 text-xl font-semibold">
+                Tell CardIQ what you need
+              </h3>
+              <p className="mt-3 leading-7 text-slate-600">
+                Enter a purchase or explore your available card benefits.
+              </p>
+            </div>
+
+            <div>
+              <div className="text-sm font-semibold text-slate-500">
+                03
+              </div>
+              <h3 className="mt-3 text-xl font-semibold">
+                Make better decisions
+              </h3>
+              <p className="mt-3 leading-7 text-slate-600">
+                Choose the card that offers the best available value.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section id="about" className="bg-slate-950 text-white">
+        <div className="mx-auto max-w-6xl px-6 py-20">
+          <div className="flex flex-col justify-between gap-8 md:flex-row md:items-center">
+            <div className="max-w-2xl">
+              <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
+                Ready to make every card spend count?
               </h2>
 
-              <p className="mt-3 text-sm leading-6 text-slate-300 sm:text-base">
-                Tell CardIQ what you are buying and we&apos;ll identify the
-                card that can give you the best available value.
+              <p className="mt-4 text-lg leading-8 text-slate-300">
+                Create your CardIQ account and start building your smarter
+                credit card portfolio.
               </p>
             </div>
 
-            <button className="shrink-0 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100">
-              Find my best card →
-            </button>
+            <a
+              href="/signup"
+              className="inline-flex shrink-0 rounded-xl bg-white px-6 py-3.5 text-sm font-semibold text-slate-950 hover:bg-slate-100"
+            >
+              Create your account →
+            </a>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* Quick Actions */}
-        <section className="mb-10">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Quick actions</h2>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {quickActions.map((action) => (
-              <button
-                key={action.title}
-                className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
-              >
-                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-lg font-semibold text-slate-700">
-                  {action.icon}
-                </div>
-
-                <h3 className="font-semibold">{action.title}</h3>
-
-                <p className="mt-1 text-sm leading-5 text-slate-500">
-                  {action.description}
-                </p>
-
-                <span className="mt-4 block text-xs font-semibold text-slate-400 transition group-hover:text-slate-700">
-                  Open →
-                </span>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        {/* Portfolio + Rewards */}
-        <section className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
-          {/* My Cards */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-6 flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold">My Cards</h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  Your card portfolio
-                </p>
-              </div>
-
-              <button className="text-sm font-semibold text-slate-600 hover:text-slate-900">
-                View all →
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              {cards.map((card) => (
-                <div
-                  key={card.id}
-                  className="flex items-center gap-4 rounded-xl border border-slate-100 p-4 transition hover:border-slate-200 hover:bg-slate-50"
-                >
-                  <div
-                    className={`flex h-12 w-16 shrink-0 items-center justify-center rounded-lg ${card.color} text-xs font-bold text-white`}
-                  >
-                    CARD
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <h3 className="truncate text-sm font-semibold">
-                      {card.name}
-                    </h3>
-
-                    <p className="mt-1 truncate text-xs text-slate-500">
-                      {card.bank} · {card.network}
-                    </p>
-                  </div>
-
-                  <div className="text-right">
-                    <p className="text-sm font-semibold">{card.reward}</p>
-                    <p className="mt-1 text-xs text-slate-400">value</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+      {/* Footer */}
+      <footer className="bg-white">
+        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-6 py-8 text-sm text-slate-500 md:flex-row md:items-center md:justify-between">
+          <div className="font-semibold text-slate-900">
+            CardIQ
           </div>
 
-          {/* Rewards */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-6">
-              <h2 className="text-lg font-semibold">Rewards snapshot</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Your portfolio at a glance
-              </p>
-            </div>
-
-            <div className="rounded-xl bg-slate-50 p-5">
-              <p className="text-sm text-slate-500">Estimated value earned</p>
-
-              <p className="mt-2 text-3xl font-bold tracking-tight">
-                ₹0
-              </p>
-
-              <p className="mt-2 text-xs text-slate-400">
-                Start tracking purchases to build your rewards history.
-              </p>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-slate-100 p-4">
-                <p className="text-xs text-slate-500">Purchases</p>
-                <p className="mt-1 text-lg font-semibold">0</p>
-              </div>
-
-              <div className="rounded-xl border border-slate-100 p-4">
-                <p className="text-xs text-slate-500">Rewards</p>
-                <p className="mt-1 text-lg font-semibold">₹0</p>
-              </div>
-            </div>
-
-            <button className="mt-5 w-full rounded-xl border border-slate-200 py-2.5 text-sm font-semibold transition hover:bg-slate-50">
-              Track a purchase
-            </button>
+          <div>
+            Make every card spend count.
           </div>
-        </section>
-
-        {/* Discover */}
-        <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-          <div className="flex flex-col justify-between gap-5 md:flex-row md:items-center">
-            <div>
-              <p className="text-sm font-medium text-slate-500">
-                Explore CardIQ
-              </p>
-
-              <h2 className="mt-1 text-xl font-semibold tracking-tight">
-                Discover more ways to get value from your cards.
-              </h2>
-
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-                Compare cards, explore rewards, discover premium benefits,
-                travel opportunities, shopping offers and more.
-              </p>
-            </div>
-
-            <button className="shrink-0 rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold transition hover:bg-slate-50">
-              Explore CardIQ →
-            </button>
-          </div>
-        </section>
-
-        {/* Footer */}
-        <footer className="mt-12 border-t border-slate-200 pt-6 text-xs text-slate-400">
-          <div className="flex flex-col justify-between gap-2 sm:flex-row">
-            <span>CardIQ</span>
-            <span>Make every card spend count.</span>
-          </div>
-        </footer>
-      </div>
+        </div>
+      </footer>
     </main>
   );
 }
