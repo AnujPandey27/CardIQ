@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 export default function SignupPage() {
   const [email, setEmail] = useState("");
@@ -28,15 +29,30 @@ export default function SignupPage() {
 
     setLoading(true);
 
-    // Supabase authentication will be connected here
-    // in the next step.
+    try {
+      const supabase = createClient();
 
-    setTimeout(() => {
-      setLoading(false);
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (error) {
+        setError(error.message);
+        return;
+      }
+
       setMessage(
-        "Your account form is ready. Authentication will be connected next."
+        "Account created successfully. Please check your email to verify your account."
       );
-    }, 500);
+
+      setPassword("");
+      setConfirmPassword("");
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -136,7 +152,7 @@ export default function SignupPage() {
                 </div>
               )}
 
-              {/* Message */}
+              {/* Success */}
               {message && (
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
                   {message}
