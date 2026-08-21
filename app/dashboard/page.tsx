@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import CardIQHeader from "@/components/CardIQHeader";
 
@@ -116,33 +115,66 @@ export default function Home() {
 
       setCheckingAuth(false);
 
-      const { data: profile, error: profileError } = await supabase
+      /*
+       * Current profile
+       *
+       * We only need the profile ID here.
+       * Avoid ordering by additional columns so this remains
+       * compatible with the current profile schema.
+       */
+      const {
+        data: profile,
+        error: profileError,
+      } = await supabase
         .from("profiles")
         .select("id")
         .eq("user_id", user.id)
-        .order("is_default", { ascending: false })
-        .order("created_at", { ascending: true })
         .limit(1)
         .maybeSingle();
 
-      if (profileError || !profile) {
-        console.error(profileError);
-        setCardError("Unable to load your current profile.");
+      if (profileError) {
+        console.error("Profile load error:", profileError);
+
+        setCardError(
+          profileError.message ||
+            "Unable to load your current profile."
+        );
+
+        setLoadingCards(false);
+        return;
+      }
+
+      if (!profile) {
+        setCardError(
+          "No profile is available for your account."
+        );
         setLoadingCards(false);
         return;
       }
 
       setProfileId(profile.id);
 
+      /*
+       * Cards belonging to the current profile
+       */
       const { data, error } = await supabase
         .from("cards")
-        .select("id, name, bank, network, variant, profile_id")
+        .select(
+          "id, name, bank, network, variant, profile_id"
+        )
         .eq("profile_id", profile.id)
-        .order("created_at", { ascending: false });
+        .order("created_at", {
+          ascending: false,
+        });
 
       if (error) {
-        console.error(error);
-        setCardError("Unable to load your cards.");
+        console.error("Cards load error:", error);
+
+        setCardError(
+          error.message ||
+            "Unable to load your cards."
+        );
+
         setLoadingCards(false);
         return;
       }
@@ -157,7 +189,9 @@ export default function Home() {
   if (checkingAuth) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[var(--background)] text-[var(--foreground)]">
-        <p className="text-sm text-[var(--muted)]">Loading CardIQ...</p>
+        <p className="text-sm text-[var(--muted)]">
+          Loading CardIQ...
+        </p>
       </main>
     );
   }
@@ -223,8 +257,10 @@ export default function Home() {
 
         {/* Quick Actions */}
         <section className="mb-10">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Quick actions</h2>
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold">
+              Quick actions
+            </h2>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -243,7 +279,9 @@ export default function Home() {
                   {action.icon}
                 </div>
 
-                <h3 className="font-semibold">{action.title}</h3>
+                <h3 className="font-semibold">
+                  {action.title}
+                </h3>
 
                 <p className="mt-1 text-sm leading-5 text-[var(--muted)]">
                   {action.description}
@@ -263,19 +301,20 @@ export default function Home() {
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
             <div className="mb-6 flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold">My Cards</h2>
+                <h2 className="text-lg font-semibold">
+                  My Cards
+                </h2>
 
                 <p className="mt-1 text-sm text-[var(--muted)]">
                   Your card portfolio
                 </p>
               </div>
 
-              <Link
-                href="/cards"
-                className="text-sm font-semibold text-[var(--muted)] transition hover:text-[var(--foreground)]"
-              >
-                View all →
-              </Link>
+              <span className="text-sm font-semibold text-[var(--muted)]">
+                {cards.length > 0
+                  ? `${cards.length} card${cards.length === 1 ? "" : "s"}`
+                  : "View portfolio"}
+              </span>
             </div>
 
             {loadingCards ? (
@@ -302,7 +341,9 @@ export default function Home() {
 
                 <button
                   type="button"
-                  onClick={() => router.push("/cards/add")}
+                  onClick={() =>
+                    router.push("/cards/add")
+                  }
                   className="mt-4 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
                 >
                   Add your first card
@@ -341,7 +382,9 @@ export default function Home() {
                           type="button"
                           onClick={() =>
                             setOpenMenuId(
-                              openMenuId === card.id ? null : card.id
+                              openMenuId === card.id
+                                ? null
+                                : card.id
                             )
                           }
                           className="flex h-9 w-9 items-center justify-center rounded-lg text-lg text-[var(--muted)] transition hover:bg-slate-100 hover:text-[var(--foreground)] dark:hover:bg-slate-800"
@@ -356,7 +399,9 @@ export default function Home() {
                               type="button"
                               onClick={() => {
                                 setOpenMenuId(null);
-                                router.push(`/cards/add?edit=${card.id}`);
+                                router.push(
+                                  `/cards/add?edit=${card.id}`
+                                );
                               }}
                               className="block w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium transition hover:bg-slate-100 dark:hover:bg-slate-800"
                             >
@@ -365,8 +410,12 @@ export default function Home() {
 
                             <button
                               type="button"
-                              onClick={() => handleDeleteCard(card.id)}
-                              disabled={deletingCardId === card.id}
+                              onClick={() =>
+                                handleDeleteCard(card.id)
+                              }
+                              disabled={
+                                deletingCardId === card.id
+                              }
                               className="block w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-red-950/30"
                             >
                               {deletingCardId === card.id
