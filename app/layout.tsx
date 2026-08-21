@@ -4,7 +4,8 @@ import ThemeProvider from "@/components/ThemeProvider";
 
 export const metadata: Metadata = {
   title: "CardIQ",
-  description: "Smart credit card recommendations and spend tracking",
+  description:
+    "Smart credit card recommendations and spend tracking",
 };
 
 export default function RootLayout({
@@ -15,7 +16,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );
