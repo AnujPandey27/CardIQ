@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  Suspense,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   useRouter,
   useSearchParams,
@@ -998,13 +1003,12 @@ const FALLBACK_NETWORKS = [
   "Other",
 ];
 
-export default function AddCardPage() {
+function AddCardForm() {
   const router = useRouter();
-  const supabase = createClient();
-  
   const searchParams = useSearchParams();
-const editCardId = searchParams.get("edit");
-const isEditMode = Boolean(editCardId);
+
+  const editCardId = searchParams.get("edit");
+  const isEditMode = Boolean(editCardId);
 
   const [profileId, setProfileId] = useState("");
   const [profileName, setProfileName] = useState("");
@@ -1034,7 +1038,10 @@ const isEditMode = Boolean(editCardId);
   const availableCards = selectedBank?.cards ?? [];
 
   const selectedCard = useMemo(
-    () => availableCards.find((item) => item.name === cardName),
+    () =>
+      availableCards.find(
+        (item) => item.name === cardName
+      ),
     [availableCards, cardName]
   );
 
@@ -1042,7 +1049,9 @@ const isEditMode = Boolean(editCardId);
 
   const selectedVariant = useMemo(
     () =>
-      availableVariants.find((item) => item.name === variant),
+      availableVariants.find(
+        (item) => item.name === variant
+      ),
     [availableVariants, variant]
   );
 
@@ -1051,104 +1060,135 @@ const isEditMode = Boolean(editCardId);
   const isManualVariant = variant === MANUAL_VALUE;
 
   useEffect(() => {
-  const loadPage = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const loadPage = async () => {
+      const supabase = createClient();
 
-    if (!user) {
-      router.push("/login");
-      return;
-    }
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("id, name, country_code, currency_code")
-      .eq("user_id", user.id)
-      .order("is_default", { ascending: false })
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
+      if (!user) {
+        router.push("/login");
+        return;
+      }
 
-    if (profileError || !profile) {
-      console.error(profileError);
-      setError("Unable to load your current profile.");
-      setLoadingProfile(false);
-      return;
-    }
+      const { data: profile, error: profileError } =
+        await supabase
+          .from("profiles")
+          .select(
+            "id, name, country_code, currency_code"
+          )
+          .eq("user_id", user.id)
+          .order("is_default", {
+            ascending: false,
+          })
+          .order("created_at", {
+            ascending: true,
+          })
+          .limit(1)
+          .maybeSingle();
 
-    setProfileId(profile.id);
-    setProfileName(profile.name);
-    setCountryCode(profile.country_code);
-    setCurrencyCode(profile.currency_code);
+      if (profileError || !profile) {
+        console.error(profileError);
 
-    /*
-     * ADD MODE
-     */
-    if (!editCardId) {
-      setLoadingProfile(false);
-      return;
-    }
+        setError(
+          "Unable to load your current profile."
+        );
 
-    /*
-     * EDIT MODE
-     */
-    const { data: card, error: cardError } = await supabase
-      .from("cards")
-      .select(
-        "id, name, bank, network, variant, profile_id"
-      )
-      .eq("id", editCardId)
-      .eq("user_id", user.id)
-      .eq("profile_id", profile.id)
-      .maybeSingle();
+        setLoadingProfile(false);
+        return;
+      }
 
-    if (cardError || !card) {
-      console.error(cardError);
-      setError("Unable to load the card you are trying to edit.");
-      setLoadingProfile(false);
-      return;
-    }
+      setProfileId(profile.id);
+      setProfileName(profile.name);
+      setCountryCode(profile.country_code);
+      setCurrencyCode(profile.currency_code);
 
-    setBank(card.bank);
-    setNetwork(card.network);
-    setVariant(card.variant ?? "");
+      // Add mode
+      if (!editCardId) {
+        setLoadingProfile(false);
+        return;
+      }
 
-    const catalogueBank = BANKS.find(
-      (item) => item.name === card.bank
-    );
+      // Edit mode
+      const { data: card, error: cardError } =
+        await supabase
+          .from("cards")
+          .select(
+            "id, name, bank, network, variant, profile_id"
+          )
+          .eq("id", editCardId)
+          .eq("user_id", user.id)
+          .eq("profile_id", profile.id)
+          .maybeSingle();
 
-    if (catalogueBank) {
-      setCardName(card.name);
+      if (cardError || !card) {
+        console.error(cardError);
+
+        setError(
+          "Unable to load the card you are trying to edit."
+        );
+
+        setLoadingProfile(false);
+        return;
+      }
+
+      setNetwork(card.network);
+
+      const catalogueBank = BANKS.find(
+        (item) => item.name === card.bank
+      );
+
+      if (!catalogueBank) {
+        setBank(MANUAL_VALUE);
+        setManualBank(card.bank);
+
+        setCardName(MANUAL_VALUE);
+        setManualCardName(card.name);
+
+        setVariant(MANUAL_VALUE);
+        setManualVariant(card.variant ?? "");
+
+        setLoadingProfile(false);
+        return;
+      }
+
+      setBank(card.bank);
 
       const catalogueCard = catalogueBank.cards.find(
         (item) => item.name === card.name
       );
 
-      const catalogueVariant = catalogueCard?.variants.find(
-        (item) => item.name === card.variant
-      );
+      if (!catalogueCard) {
+        setCardName(MANUAL_VALUE);
+        setManualCardName(card.name);
+
+        setVariant(MANUAL_VALUE);
+        setManualVariant(card.variant ?? "");
+
+        setLoadingProfile(false);
+        return;
+      }
+
+      setCardName(card.name);
+
+      const catalogueVariant =
+        catalogueCard.variants.find(
+          (item) => item.name === card.variant
+        );
 
       if (!catalogueVariant) {
         setVariant(MANUAL_VALUE);
         setManualVariant(card.variant ?? "");
+      } else {
+        setVariant(catalogueVariant.name);
       }
-    } else {
-      setBank(MANUAL_VALUE);
-      setManualBank(card.bank);
 
-      setCardName(MANUAL_VALUE);
-      setManualCardName(card.name);
+      setLoadingProfile(false);
+    };
 
-      setVariant(MANUAL_VALUE);
-      setManualVariant(card.variant ?? "");
-    }
-
-    setLoadingProfile(false);
-  };
-
-  loadPage();
-}, [editCardId, router, supabase]);
+    loadPage();
+  }, [editCardId, router]);
 
   const handleBankChange = (value: string) => {
     setBank(value);
@@ -1209,28 +1249,38 @@ const isEditMode = Boolean(editCardId);
     }
 
     if (!finalBank) {
-      setError("Please select or enter a bank / issuer.");
+      setError(
+        "Please select or enter a bank / issuer."
+      );
       return;
     }
 
     if (!finalCardName) {
-      setError("Please select or enter a card name.");
+      setError(
+        "Please select or enter a card name."
+      );
       return;
     }
 
     if (!finalVariant) {
-      setError("Please select or enter a card variant.");
+      setError(
+        "Please select or enter a card variant."
+      );
       return;
     }
 
     if (!network) {
-      setError("Please select the card network.");
+      setError(
+        "Please select the card network."
+      );
       return;
     }
 
     setSaving(true);
 
     try {
+      const supabase = createClient();
+
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -1241,37 +1291,39 @@ const isEditMode = Boolean(editCardId);
       }
 
       if (isEditMode && editCardId) {
-  const { error: updateError } = await supabase
-    .from("cards")
-    .update({
-      name: finalCardName,
-      bank: finalBank,
-      network,
-      variant: finalVariant,
-    })
-    .eq("id", editCardId)
-    .eq("user_id", user.id)
-    .eq("profile_id", profileId);
+        const { error: updateError } =
+          await supabase
+            .from("cards")
+            .update({
+              name: finalCardName,
+              bank: finalBank,
+              network,
+              variant: finalVariant,
+            })
+            .eq("id", editCardId)
+            .eq("user_id", user.id)
+            .eq("profile_id", profileId);
 
-  if (updateError) {
-    throw updateError;
-  }
-} else {
-  const { error: insertError } = await supabase
-    .from("cards")
-    .insert({
-      user_id: user.id,
-      profile_id: profileId,
-      name: finalCardName,
-      bank: finalBank,
-      network,
-      variant: finalVariant,
-    });
+        if (updateError) {
+          throw updateError;
+        }
+      } else {
+        const { error: insertError } =
+          await supabase
+            .from("cards")
+            .insert({
+              user_id: user.id,
+              profile_id: profileId,
+              name: finalCardName,
+              bank: finalBank,
+              network,
+              variant: finalVariant,
+            });
 
-  if (insertError) {
-    throw insertError;
-  }
-}
+        if (insertError) {
+          throw insertError;
+        }
+      }
 
       router.push("/dashboard");
       router.refresh();
@@ -1281,7 +1333,9 @@ const isEditMode = Boolean(editCardId);
       setError(
         err instanceof Error
           ? err.message
-          : "Something went wrong while adding your card."
+          : isEditMode
+            ? "Something went wrong while updating your card."
+            : "Something went wrong while adding your card."
       );
     } finally {
       setSaving(false);
@@ -1299,7 +1353,8 @@ const isEditMode = Boolean(editCardId);
   }
 
   const displayedNetworks =
-    selectedVariant?.networks ?? FALLBACK_NETWORKS;
+    selectedVariant?.networks ??
+    FALLBACK_NETWORKS;
 
   return (
     <main className="min-h-screen bg-[#f7f8fa] text-slate-900">
@@ -1307,10 +1362,13 @@ const isEditMode = Boolean(editCardId);
 
       <div className="mx-auto max-w-3xl px-5 py-8 lg:px-8 lg:py-12">
 
+        {/* Header */}
         <div className="mb-8">
           <button
             type="button"
-            onClick={() => router.push("/dashboard")}
+            onClick={() =>
+              router.push("/dashboard")
+            }
             className="mb-5 text-sm font-medium text-slate-500 transition hover:text-slate-900"
           >
             ← Back to dashboard
@@ -1321,19 +1379,24 @@ const isEditMode = Boolean(editCardId);
           </p>
 
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            {isEditMode ? "Edit card" : "Add a card"}
+            {isEditMode
+              ? "Edit card"
+              : "Add a card"}
           </h1>
 
-         <p className="mt-3 max-w-2xl text-base leading-7 text-slate-500">
-          {isEditMode
-          ? "Update your card details and keep your CardIQ portfolio accurate."
-          : "Add your credit card to CardIQ so we can track it and help identify the best value for your spending."}
-        </p>
+          <p className="mt-3 max-w-2xl text-base leading-7 text-slate-500">
+            {isEditMode
+              ? "Update your card details and keep your CardIQ portfolio accurate."
+              : "Add your credit card to CardIQ so we can track it and help identify the best value for your spending."}
+          </p>
         </div>
 
+        {/* Current Profile */}
         <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-            Adding card to
+            {isEditMode
+              ? "Editing card in"
+              : "Adding card to"}
           </p>
 
           <div className="mt-2 flex items-center justify-between gap-4">
@@ -1353,6 +1416,7 @@ const isEditMode = Boolean(editCardId);
           </div>
         </div>
 
+        {/* Form */}
         <form
           onSubmit={handleSubmit}
           className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
@@ -1372,7 +1436,11 @@ const isEditMode = Boolean(editCardId);
                 <select
                   id="bank"
                   value={bank}
-                  onChange={(e) => handleBankChange(e.target.value)}
+                  onChange={(event) =>
+                    handleBankChange(
+                      event.target.value
+                    )
+                  }
                   className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
                   required
                 >
@@ -1381,7 +1449,10 @@ const isEditMode = Boolean(editCardId);
                   </option>
 
                   {BANKS.map((item) => (
-                    <option key={item.name} value={item.name}>
+                    <option
+                      key={item.name}
+                      value={item.name}
+                    >
                       {item.name}
                     </option>
                   ))}
@@ -1396,7 +1467,11 @@ const isEditMode = Boolean(editCardId);
                     id="manual-bank"
                     type="text"
                     value={manualBank}
-                    onChange={(e) => setManualBank(e.target.value)}
+                    onChange={(event) =>
+                      setManualBank(
+                        event.target.value
+                      )
+                    }
                     placeholder="Enter bank / issuer"
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
                     required
@@ -1410,6 +1485,8 @@ const isEditMode = Boolean(editCardId);
                       setCardName("");
                       setVariant("");
                       setNetwork("");
+                      setManualCardName("");
+                      setManualVariant("");
                     }}
                     className="mt-2 text-xs font-semibold text-slate-500 hover:text-slate-900"
                   >
@@ -1432,7 +1509,11 @@ const isEditMode = Boolean(editCardId);
                 <select
                   id="cardName"
                   value={cardName}
-                  onChange={(e) => handleCardChange(e.target.value)}
+                  onChange={(event) =>
+                    handleCardChange(
+                      event.target.value
+                    )
+                  }
                   disabled={!bank || isManualBank}
                   className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
                   required
@@ -1446,7 +1527,10 @@ const isEditMode = Boolean(editCardId);
                   </option>
 
                   {availableCards.map((card) => (
-                    <option key={card.name} value={card.name}>
+                    <option
+                      key={card.name}
+                      value={card.name}
+                    >
                       {card.name}
                     </option>
                   ))}
@@ -1463,7 +1547,11 @@ const isEditMode = Boolean(editCardId);
                     id="manual-card"
                     type="text"
                     value={manualCardName}
-                    onChange={(e) => setManualCardName(e.target.value)}
+                    onChange={(event) =>
+                      setManualCardName(
+                        event.target.value
+                      )
+                    }
                     placeholder="Enter card name"
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
                     required
@@ -1475,6 +1563,7 @@ const isEditMode = Boolean(editCardId);
                       setCardName("");
                       setManualCardName("");
                       setVariant("");
+                      setManualVariant("");
                       setNetwork("");
                     }}
                     className="mt-2 text-xs font-semibold text-slate-500 hover:text-slate-900"
@@ -1498,8 +1587,14 @@ const isEditMode = Boolean(editCardId);
                 <select
                   id="variant"
                   value={variant}
-                  onChange={(e) => handleVariantChange(e.target.value)}
-                  disabled={!cardName || isManualCard}
+                  onChange={(event) =>
+                    handleVariantChange(
+                      event.target.value
+                    )
+                  }
+                  disabled={
+                    !cardName || isManualCard
+                  }
                   className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
                   required
                 >
@@ -1511,14 +1606,16 @@ const isEditMode = Boolean(editCardId);
                         : "Select a card name first"}
                   </option>
 
-                  {availableVariants.map((item) => (
-                    <option
-                      key={item.name}
-                      value={item.name}
-                    >
-                      {item.name}
-                    </option>
-                  ))}
+                  {availableVariants.map(
+                    (item) => (
+                      <option
+                        key={item.name}
+                        value={item.name}
+                      >
+                        {item.name}
+                      </option>
+                    )
+                  )}
 
                   {cardName && !isManualCard && (
                     <option value={MANUAL_VALUE}>
@@ -1532,7 +1629,11 @@ const isEditMode = Boolean(editCardId);
                     id="manual-variant"
                     type="text"
                     value={manualVariant}
-                    onChange={(e) => setManualVariant(e.target.value)}
+                    onChange={(event) =>
+                      setManualVariant(
+                        event.target.value
+                      )
+                    }
                     placeholder="Enter card variant"
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
                     required
@@ -1565,8 +1666,12 @@ const isEditMode = Boolean(editCardId);
               <select
                 id="network"
                 value={network}
-                onChange={(e) => setNetwork(e.target.value)}
-                disabled={!variant && !isManualVariant}
+                onChange={(event) =>
+                  setNetwork(event.target.value)
+                }
+                disabled={
+                  !variant && !isManualVariant
+                }
                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
                 required
               >
@@ -1576,13 +1681,20 @@ const isEditMode = Boolean(editCardId);
                     : "Select a card variant first"}
                 </option>
 
-                {displayedNetworks.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
+                {displayedNetworks.map(
+                  (item) => (
+                    <option
+                      key={item}
+                      value={item}
+                    >
+                      {item}
+                    </option>
+                  )
+                )}
 
-                {!displayedNetworks.includes("Other") && (
+                {!displayedNetworks.includes(
+                  "Other"
+                ) && (
                   <option value="Other">
                     Other
                   </option>
@@ -1590,16 +1702,20 @@ const isEditMode = Boolean(editCardId);
               </select>
             </div>
 
+            {/* Error */}
             {error && (
               <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {error}
               </div>
             )}
 
+            {/* Actions */}
             <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-6 sm:flex-row sm:justify-end">
               <button
                 type="button"
-                onClick={() => router.push("/dashboard")}
+                onClick={() =>
+                  router.push("/dashboard")
+                }
                 className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
               >
                 Cancel
@@ -1611,17 +1727,33 @@ const isEditMode = Boolean(editCardId);
                 className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {saving
-  ? isEditMode
-    ? "Saving changes..."
-    : "Adding card..."
-  : isEditMode
-    ? "Save changes"
-    : "Add card"}
+                  ? isEditMode
+                    ? "Saving changes..."
+                    : "Adding card..."
+                  : isEditMode
+                    ? "Save changes"
+                    : "Add card"}
               </button>
             </div>
           </div>
         </form>
       </div>
     </main>
+  );
+}
+
+export default function AddCardPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex min-h-screen items-center justify-center bg-[#f7f8fa] text-slate-900">
+          <p className="text-sm text-slate-500">
+            Loading CardIQ...
+          </p>
+        </main>
+      }
+    >
+      <AddCardForm />
+    </Suspense>
   );
 }
