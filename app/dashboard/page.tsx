@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 type Card = {
   id: number;
@@ -67,6 +68,34 @@ const quickActions = [
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState("Overview");
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const supabase = createClient();
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        window.location.href = "/login";
+        return;
+      }
+
+      setCheckingAuth(false);
+    };
+
+    checkAuth();
+  }, []);
+
+  if (checkingAuth) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#f7f8fa] text-slate-900">
+        <p className="text-sm text-slate-500">Loading CardIQ...</p>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-[#f7f8fa] text-slate-900">
