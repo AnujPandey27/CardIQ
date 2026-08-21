@@ -296,14 +296,13 @@ export default function Home() {
         </section>
 
         {/* Footer */}
-        <footer className="mt-12 border-t border-slate-200 pt-6 text-xs text-slate-400">
+                <footer className="mt-12 border-t border-slate-200 pt-6 text-xs text-slate-400">
           <div className="flex flex-col justify-between gap-2 sm:flex-row">
             <span>CardIQ</span>
             <span>Make every card spend count.</span>
           </div>
-          <footer>
-            ...
-          </footer>
-        </div>
-      </main>
-    );
+        </footer>
+      </div>
+    </main>
+  );
+}
