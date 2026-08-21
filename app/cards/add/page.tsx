@@ -20,6 +20,8 @@ type BankOption = {
   cards: CardOption[];
 };
 
+const MANUAL_VALUE = "__manual__";
+
 const BANKS: BankOption[] = [
   {
     name: "HDFC Bank",
@@ -28,7 +30,11 @@ const BANKS: BankOption[] = [
         name: "Infinia",
         variants: [
           {
-            name: "Infinia Metal",
+            name: "Infinia",
+            networks: ["Visa", "Mastercard"],
+          },
+          {
+            name: "Infinia (Metal Edition)",
             networks: ["Visa", "Mastercard"],
           },
         ],
@@ -37,7 +43,11 @@ const BANKS: BankOption[] = [
         name: "Diners Club Black",
         variants: [
           {
-            name: "Diners Club Black Metal",
+            name: "Diners Club Black",
+            networks: ["Diners Club"],
+          },
+          {
+            name: "Diners Club Black Metal Edition",
             networks: ["Diners Club"],
           },
         ],
@@ -47,7 +57,7 @@ const BANKS: BankOption[] = [
         variants: [
           {
             name: "Regalia Gold",
-            networks: ["Visa"],
+            networks: ["Visa", "Mastercard"],
           },
         ],
       },
@@ -56,7 +66,7 @@ const BANKS: BankOption[] = [
         variants: [
           {
             name: "Regalia",
-            networks: ["Visa"],
+            networks: ["Visa", "Mastercard"],
           },
         ],
       },
@@ -116,7 +126,7 @@ const BANKS: BankOption[] = [
         variants: [
           {
             name: "Emeralde",
-            networks: ["Mastercard", "Visa"],
+            networks: ["Visa", "Mastercard"],
           },
         ],
       },
@@ -124,8 +134,20 @@ const BANKS: BankOption[] = [
         name: "Sapphiro",
         variants: [
           {
-            name: "Sapphiro",
-            networks: ["Visa", "Mastercard"],
+            name: "Sapphiro Visa",
+            networks: ["Visa"],
+          },
+          {
+            name: "Sapphiro Mastercard",
+            networks: ["Mastercard"],
+          },
+          {
+            name: "Sapphiro American Express",
+            networks: ["American Express"],
+          },
+          {
+            name: "Sapphiro RuPay",
+            networks: ["RuPay"],
           },
         ],
       },
@@ -133,8 +155,20 @@ const BANKS: BankOption[] = [
         name: "Rubyx",
         variants: [
           {
-            name: "Rubyx",
-            networks: ["Visa", "Mastercard"],
+            name: "Rubyx Visa",
+            networks: ["Visa"],
+          },
+          {
+            name: "Rubyx Mastercard",
+            networks: ["Mastercard"],
+          },
+          {
+            name: "Rubyx American Express",
+            networks: ["American Express"],
+          },
+          {
+            name: "Rubyx RuPay",
+            networks: ["RuPay"],
           },
         ],
       },
@@ -142,8 +176,20 @@ const BANKS: BankOption[] = [
         name: "Coral",
         variants: [
           {
-            name: "Coral",
-            networks: ["Visa", "RuPay"],
+            name: "Coral Visa",
+            networks: ["Visa"],
+          },
+          {
+            name: "Coral Mastercard",
+            networks: ["Mastercard"],
+          },
+          {
+            name: "Coral American Express",
+            networks: ["American Express"],
+          },
+          {
+            name: "Coral RuPay",
+            networks: ["RuPay"],
           },
         ],
       },
@@ -211,7 +257,7 @@ const BANKS: BankOption[] = [
         name: "Airtel",
         variants: [
           {
-            name: "Airtel",
+            name: "Airtel Axis Bank",
             networks: ["Mastercard", "Visa"],
           },
         ],
@@ -247,6 +293,10 @@ const BANKS: BankOption[] = [
             name: "ELITE",
             networks: ["Visa"],
           },
+          {
+            name: "ELITE Advantage",
+            networks: ["Visa"],
+          },
         ],
       },
       {
@@ -254,6 +304,10 @@ const BANKS: BankOption[] = [
         variants: [
           {
             name: "PRIME",
+            networks: ["Visa"],
+          },
+          {
+            name: "PRIME Advantage",
             networks: ["Visa"],
           },
         ],
@@ -272,6 +326,10 @@ const BANKS: BankOption[] = [
         variants: [
           {
             name: "SimplyCLICK",
+            networks: ["Visa"],
+          },
+          {
+            name: "SimplyCLICK Advantage",
             networks: ["Visa"],
           },
         ],
@@ -298,6 +356,15 @@ const BANKS: BankOption[] = [
           },
         ],
       },
+      {
+        name: "PULSE",
+        variants: [
+          {
+            name: "PULSE",
+            networks: ["Mastercard"],
+          },
+        ],
+      },
     ],
   },
 
@@ -308,7 +375,7 @@ const BANKS: BankOption[] = [
         name: "Membership Rewards",
         variants: [
           {
-            name: "MRCC",
+            name: "Membership Rewards Credit Card",
             networks: ["American Express"],
           },
         ],
@@ -317,7 +384,7 @@ const BANKS: BankOption[] = [
         name: "Platinum Travel",
         variants: [
           {
-            name: "Platinum Travel",
+            name: "Platinum Travel Credit Card",
             networks: ["American Express"],
           },
         ],
@@ -326,7 +393,16 @@ const BANKS: BankOption[] = [
         name: "Platinum",
         variants: [
           {
-            name: "Platinum",
+            name: "Platinum Card",
+            networks: ["American Express"],
+          },
+        ],
+      },
+      {
+        name: "Gold",
+        variants: [
+          {
+            name: "Gold Card",
             networks: ["American Express"],
           },
         ],
@@ -335,7 +411,7 @@ const BANKS: BankOption[] = [
         name: "SmartEarn",
         variants: [
           {
-            name: "SmartEarn",
+            name: "SmartEarn Credit Card",
             networks: ["American Express"],
           },
         ],
@@ -347,7 +423,7 @@ const BANKS: BankOption[] = [
     name: "IDFC FIRST Bank",
     cards: [
       {
-        name: "Wealth",
+        name: "FIRST Wealth",
         variants: [
           {
             name: "Wealth",
@@ -356,7 +432,7 @@ const BANKS: BankOption[] = [
         ],
       },
       {
-        name: "Select",
+        name: "FIRST Select",
         variants: [
           {
             name: "Select",
@@ -365,7 +441,7 @@ const BANKS: BankOption[] = [
         ],
       },
       {
-        name: "Millennia",
+        name: "FIRST Millennia",
         variants: [
           {
             name: "Millennia",
@@ -374,13 +450,49 @@ const BANKS: BankOption[] = [
         ],
       },
       {
-        name: "WOW",
+        name: "FIRST WOW!",
         variants: [
           {
-            name: "WOW",
+            name: "WOW!",
             networks: ["Visa"],
-        },
-      ],
+          },
+        ],
+      },
+      {
+        name: "FIRST Private",
+        variants: [
+          {
+            name: "Private",
+            networks: ["Visa"],
+          },
+        ],
+      },
+      {
+        name: "Ashva",
+        variants: [
+          {
+            name: "Ashva Metal",
+            networks: ["Visa"],
+          },
+        ],
+      },
+      {
+        name: "Mayura",
+        variants: [
+          {
+            name: "Mayura Metal",
+            networks: ["Visa"],
+          },
+        ],
+      },
+      {
+        name: "FIRST SWYP",
+        variants: [
+          {
+            name: "SWYP",
+            networks: ["Visa"],
+          },
+        ],
       },
     ],
   },
@@ -389,19 +501,10 @@ const BANKS: BankOption[] = [
     name: "IndusInd Bank",
     cards: [
       {
-        name: "EazyDiner",
+        name: "Indulge",
         variants: [
           {
-            name: "EazyDiner",
-            networks: ["Visa"],
-          },
-        ],
-      },
-      {
-        name: "Legend",
-        variants: [
-          {
-            name: "Legend",
+            name: "Indulge",
             networks: ["Visa"],
           },
         ],
@@ -411,15 +514,32 @@ const BANKS: BankOption[] = [
         variants: [
           {
             name: "Pinnacle",
-            networks: ["Visa"],
+            networks: ["Mastercard"],
           },
         ],
       },
       {
-        name: "Indulge",
+        name: "Legend",
         variants: [
           {
-            name: "Indulge",
+            name: "Legend Visa",
+            networks: ["Visa"],
+          },
+          {
+            name: "Legend Mastercard",
+            networks: ["Mastercard"],
+          },
+        ],
+      },
+      {
+        name: "EazyDiner",
+        variants: [
+          {
+            name: "EazyDiner Signature",
+            networks: ["Visa"],
+          },
+          {
+            name: "EazyDiner Platinum",
             networks: ["Visa"],
           },
         ],
@@ -431,8 +551,12 @@ const BANKS: BankOption[] = [
     name: "Kotak Mahindra Bank",
     cards: [
       {
-        name: "White Reserve",
+        name: "White",
         variants: [
+          {
+            name: "White Signature",
+            networks: ["Visa"],
+          },
           {
             name: "White Reserve",
             networks: ["Visa"],
@@ -440,16 +564,7 @@ const BANKS: BankOption[] = [
         ],
       },
       {
-        name: "White",
-        variants: [
-          {
-            name: "White",
-            networks: ["Visa"],
-          },
-        ],
-      },
-      {
-        name: "Zen Signature",
+        name: "Zen",
         variants: [
           {
             name: "Zen Signature",
@@ -458,7 +573,7 @@ const BANKS: BankOption[] = [
         ],
       },
       {
-        name: "League Platinum",
+        name: "League",
         variants: [
           {
             name: "League Platinum",
@@ -627,23 +742,37 @@ const BANKS: BankOption[] = [
     name: "YES BANK",
     cards: [
       {
-        name: "FIRST",
+        name: "RESERV",
         variants: [
           {
-            name: "FIRST Exclusive",
-            networks: ["Mastercard"],
-          },
-          {
-            name: "FIRST Preferred",
+            name: "RESERV",
             networks: ["Mastercard"],
           },
         ],
       },
       {
-        name: "Prosperity",
+        name: "ELITE+",
         variants: [
           {
-            name: "Prosperity Edge",
+            name: "ELITE+",
+            networks: ["Mastercard"],
+          },
+        ],
+      },
+      {
+        name: "SELECT",
+        variants: [
+          {
+            name: "SELECT",
+            networks: ["Mastercard"],
+          },
+        ],
+      },
+      {
+        name: "ACE",
+        variants: [
+          {
+            name: "ACE",
             networks: ["Visa"],
           },
         ],
@@ -668,6 +797,15 @@ const BANKS: BankOption[] = [
         variants: [
           {
             name: "Imperio",
+            networks: ["Visa"],
+          },
+        ],
+      },
+      {
+        name: "Signet",
+        variants: [
+          {
+            name: "Signet",
             networks: ["Visa"],
           },
         ],
@@ -703,20 +841,66 @@ const BANKS: BankOption[] = [
     name: "Canara Bank",
     cards: [
       {
-        name: "World",
+        name: "Classic",
         variants: [
           {
-            name: "World",
+            name: "RuPay Classic",
+            networks: ["RuPay"],
+          },
+          {
+            name: "Mastercard Standard",
             networks: ["Mastercard"],
+          },
+          {
+            name: "Visa Classic",
+            networks: ["Visa"],
           },
         ],
       },
       {
-        name: "RuPay Select",
+        name: "Gold",
+        variants: [
+          {
+            name: "Mastercard Gold",
+            networks: ["Mastercard"],
+          },
+          {
+            name: "Visa Gold",
+            networks: ["Visa"],
+          },
+        ],
+      },
+      {
+        name: "Platinum",
+        variants: [
+          {
+            name: "RuPay Platinum",
+            networks: ["RuPay"],
+          },
+          {
+            name: "Mastercard Platinum",
+            networks: ["Mastercard"],
+          },
+          {
+            name: "Visa Platinum",
+            networks: ["Visa"],
+          },
+        ],
+      },
+      {
+        name: "Select / World / Signature",
         variants: [
           {
             name: "RuPay Select",
             networks: ["RuPay"],
+          },
+          {
+            name: "Mastercard World",
+            networks: ["Mastercard"],
+          },
+          {
+            name: "Visa Signature",
+            networks: ["Visa"],
           },
         ],
       },
@@ -727,19 +911,36 @@ const BANKS: BankOption[] = [
     name: "Punjab National Bank",
     cards: [
       {
-        name: "Select",
+        name: "RuPay Platinum",
         variants: [
           {
-            name: "Select",
-            networks: ["Visa"],
+            name: "RuPay Platinum",
+            networks: ["RuPay"],
           },
         ],
       },
       {
-        name: "RuPay Select",
+        name: "RuPay Select / Millennial",
         variants: [
           {
             name: "RuPay Select",
+            networks: ["RuPay"],
+          },
+          {
+            name: "RuPay Millennial",
+            networks: ["RuPay"],
+          },
+        ],
+      },
+      {
+        name: "Rakshak",
+        variants: [
+          {
+            name: "Rakshak RuPay Platinum",
+            networks: ["RuPay"],
+          },
+          {
+            name: "Rakshak RuPay Select",
             networks: ["RuPay"],
           },
         ],
@@ -768,11 +969,24 @@ const BANKS: BankOption[] = [
           },
         ],
       },
+      {
+        name: "SuperX",
+        variants: [
+          {
+            name: "SuperX",
+            networks: ["Visa"],
+          },
+          {
+            name: "SuperX Plus",
+            networks: ["Visa"],
+          },
+        ],
+      },
     ],
   },
 ];
 
-const NETWORKS = [
+const FALLBACK_NETWORKS = [
   "Visa",
   "Mastercard",
   "American Express",
@@ -780,8 +994,6 @@ const NETWORKS = [
   "Diners Club",
   "Other",
 ];
-
-const MANUAL_VALUE = "__manual__";
 
 export default function AddCardPage() {
   const router = useRouter();
@@ -802,6 +1014,7 @@ export default function AddCardPage() {
   const [manualVariant, setManualVariant] = useState("");
 
   const [network, setNetwork] = useState("");
+
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -861,7 +1074,6 @@ export default function AddCardPage() {
       setProfileName(profile.name);
       setCountryCode(profile.country_code);
       setCurrencyCode(profile.currency_code);
-
       setLoadingProfile(false);
     };
 
@@ -882,33 +1094,28 @@ export default function AddCardPage() {
     setVariant("");
     setNetwork("");
     setManualVariant("");
-
-    if (value === MANUAL_VALUE) {
-      setManualCardName("");
-    }
   };
 
   const handleVariantChange = (value: string) => {
     setVariant(value);
+    setNetwork("");
 
     if (value === MANUAL_VALUE) {
-      setNetwork("");
-      setManualVariant("");
       return;
     }
 
-    const variantOption = availableVariants.find(
+    const option = availableVariants.find(
       (item) => item.name === value
     );
 
-    if (variantOption && variantOption.networks.length === 1) {
-      setNetwork(variantOption.networks[0]);
-    } else {
-      setNetwork("");
+    if (option?.networks.length === 1) {
+      setNetwork(option.networks[0]);
     }
   };
 
-  const handleSubmit = async (event: React.FormEvent) => {
+  const handleSubmit = async (
+    event: React.FormEvent<HTMLFormElement>
+  ) => {
     event.preventDefault();
     setError("");
 
@@ -925,7 +1132,9 @@ export default function AddCardPage() {
       : variant.trim();
 
     if (!profileId) {
-      setError("Your profile could not be identified. Please try again.");
+      setError(
+        "Your profile could not be identified. Please try again."
+      );
       return;
     }
 
@@ -1001,12 +1210,15 @@ export default function AddCardPage() {
     );
   }
 
+  const displayedNetworks =
+    selectedVariant?.networks ?? FALLBACK_NETWORKS;
+
   return (
     <main className="min-h-screen bg-[#f7f8fa] text-slate-900">
       <CardIQHeader />
 
       <div className="mx-auto max-w-3xl px-5 py-8 lg:px-8 lg:py-12">
-        {/* Header */}
+
         <div className="mb-8">
           <button
             type="button"
@@ -1025,12 +1237,11 @@ export default function AddCardPage() {
           </h1>
 
           <p className="mt-3 max-w-2xl text-base leading-7 text-slate-500">
-            Add your credit card to CardIQ so we can track it and help you
+            Add your credit card to CardIQ so we can track it and help
             identify the best value for your spending.
           </p>
         </div>
 
-        {/* Current Profile */}
         <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
             Adding card to
@@ -1053,7 +1264,6 @@ export default function AddCardPage() {
           </div>
         </div>
 
-        {/* Form */}
         <form
           onSubmit={handleSubmit}
           className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
@@ -1064,7 +1274,7 @@ export default function AddCardPage() {
             <div>
               <label
                 htmlFor="bank"
-                className="mb-2 block text-sm font-semibold text-slate-900"
+                className="mb-2 block text-sm font-semibold"
               >
                 Bank / issuer
               </label>
@@ -1073,13 +1283,13 @@ export default function AddCardPage() {
                 <select
                   id="bank"
                   value={bank}
-                  onChange={(event) =>
-                    handleBankChange(event.target.value)
-                  }
+                  onChange={(e) => handleBankChange(e.target.value)}
                   className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
                   required
                 >
-                  <option value="">Select bank / issuer</option>
+                  <option value="">
+                    Select bank / issuer
+                  </option>
 
                   {BANKS.map((item) => (
                     <option key={item.name} value={item.name}>
@@ -1097,10 +1307,8 @@ export default function AddCardPage() {
                     id="manual-bank"
                     type="text"
                     value={manualBank}
-                    onChange={(event) =>
-                      setManualBank(event.target.value)
-                    }
-                    placeholder="Enter bank / issuer name"
+                    onChange={(e) => setManualBank(e.target.value)}
+                    placeholder="Enter bank / issuer"
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
                     required
                   />
@@ -1126,7 +1334,7 @@ export default function AddCardPage() {
             <div>
               <label
                 htmlFor="cardName"
-                className="mb-2 block text-sm font-semibold text-slate-900"
+                className="mb-2 block text-sm font-semibold"
               >
                 Card name
               </label>
@@ -1135,19 +1343,17 @@ export default function AddCardPage() {
                 <select
                   id="cardName"
                   value={cardName}
-                  onChange={(event) =>
-                    handleCardChange(event.target.value)
-                  }
+                  onChange={(e) => handleCardChange(e.target.value)}
                   disabled={!bank || isManualBank}
                   className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
                   required
                 >
                   <option value="">
                     {isManualBank
-                      ? "Enter your bank manually"
+                      ? "Enter bank manually"
                       : bank
                         ? "Select card name"
-                        : "Select a bank / issuer first"}
+                        : "Select a bank first"}
                   </option>
 
                   {availableCards.map((card) => (
@@ -1168,9 +1374,7 @@ export default function AddCardPage() {
                     id="manual-card"
                     type="text"
                     value={manualCardName}
-                    onChange={(event) =>
-                      setManualCardName(event.target.value)
-                    }
+                    onChange={(e) => setManualCardName(e.target.value)}
                     placeholder="Enter card name"
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
                     required
@@ -1196,7 +1400,7 @@ export default function AddCardPage() {
             <div>
               <label
                 htmlFor="variant"
-                className="mb-2 block text-sm font-semibold text-slate-900"
+                className="mb-2 block text-sm font-semibold"
               >
                 Card variant
               </label>
@@ -1205,23 +1409,24 @@ export default function AddCardPage() {
                 <select
                   id="variant"
                   value={variant}
-                  onChange={(event) =>
-                    handleVariantChange(event.target.value)
-                  }
+                  onChange={(e) => handleVariantChange(e.target.value)}
                   disabled={!cardName || isManualCard}
                   className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
                   required
                 >
                   <option value="">
                     {isManualCard
-                      ? "Enter your card name manually"
+                      ? "Enter card name manually"
                       : cardName
                         ? "Select card variant"
                         : "Select a card name first"}
                   </option>
 
                   {availableVariants.map((item) => (
-                    <option key={item.name} value={item.name}>
+                    <option
+                      key={item.name}
+                      value={item.name}
+                    >
                       {item.name}
                     </option>
                   ))}
@@ -1238,9 +1443,7 @@ export default function AddCardPage() {
                     id="manual-variant"
                     type="text"
                     value={manualVariant}
-                    onChange={(event) =>
-                      setManualVariant(event.target.value)
-                    }
+                    onChange={(e) => setManualVariant(e.target.value)}
                     placeholder="Enter card variant"
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
                     required
@@ -1265,7 +1468,7 @@ export default function AddCardPage() {
             <div>
               <label
                 htmlFor="network"
-                className="mb-2 block text-sm font-semibold text-slate-900"
+                className="mb-2 block text-sm font-semibold"
               >
                 Network
               </label>
@@ -1273,9 +1476,7 @@ export default function AddCardPage() {
               <select
                 id="network"
                 value={network}
-                onChange={(event) =>
-                  setNetwork(event.target.value)
-                }
+                onChange={(e) => setNetwork(e.target.value)}
                 disabled={!variant && !isManualVariant}
                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
                 required
@@ -1286,31 +1487,26 @@ export default function AddCardPage() {
                     : "Select a card variant first"}
                 </option>
 
-                {(selectedVariant?.networks ?? NETWORKS).map(
-                  (item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  )
-                )}
+                {displayedNetworks.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
 
-                {selectedVariant &&
-                  selectedVariant.networks.length > 0 && (
-                    <option value="Other">
-                      Other
-                    </option>
-                  )}
+                {!displayedNetworks.includes("Other") && (
+                  <option value="Other">
+                    Other
+                  </option>
+                )}
               </select>
             </div>
 
-            {/* Error */}
             {error && (
               <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {error}
               </div>
             )}
 
-            {/* Actions */}
             <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-6 sm:flex-row sm:justify-end">
               <button
                 type="button"
