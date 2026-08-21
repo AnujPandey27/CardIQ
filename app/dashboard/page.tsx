@@ -11,6 +11,7 @@ type Card = {
   bank: string;
   network: string;
   variant: string | null;
+  profile_id: string;
 };
 
 const quickActions = [
@@ -40,9 +41,59 @@ export default function Home() {
   const router = useRouter();
 
   const [cards, setCards] = useState<Card[]>([]);
+  const [profileId, setProfileId] = useState("");
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [loadingCards, setLoadingCards] = useState(true);
   const [cardError, setCardError] = useState("");
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [deletingCardId, setDeletingCardId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState("");
+
+  const handleDeleteCard = async (cardId: string) => {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this card from your portfolio?"
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingCardId(cardId);
+    setDeleteError("");
+
+    const supabase = createClient();
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("cards")
+      .delete()
+      .eq("id", cardId)
+      .eq("user_id", user.id)
+      .eq("profile_id", profileId);
+
+    if (error) {
+      setDeleteError("Unable to delete this card.");
+      setDeletingCardId(null);
+      return;
+    }
+
+    setCards((currentCards) =>
+      currentCards.filter((card) => card.id !== cardId)
+    );
+
+    setOpenMenuId(null);
+    setDeletingCardId(null);
+  };
+
+  useEffect(() => {
   
   useEffect(() => {
     const loadDashboard = async () => {
@@ -59,20 +110,37 @@ export default function Home() {
 
       setCheckingAuth(false);
 
-      const { data, error } = await supabase
-        .from("cards")
-        .select("id, name, bank, network, variant")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
+const { data: profile, error: profileError } = await supabase
+  .from("profiles")
+  .select("id")
+  .eq("user_id", user.id)
+  .order("is_default", { ascending: false })
+  .order("created_at", { ascending: true })
+  .limit(1)
+  .maybeSingle();
 
-      if (error) {
-        setCardError("Unable to load your cards.");
-        setLoadingCards(false);
-        return;
-      }
+if (profileError || !profile) {
+  setCardError("Unable to load your current profile.");
+  setLoadingCards(false);
+  return;
+}
 
-      setCards(data ?? []);
-      setLoadingCards(false);
+setProfileId(profile.id);
+
+const { data, error } = await supabase
+  .from("cards")
+  .select("id, name, bank, network, variant, profile_id")
+  .eq("profile_id", profile.id)
+  .order("created_at", { ascending: false });
+
+if (error) {
+  setCardError("Unable to load your cards.");
+  setLoadingCards(false);
+  return;
+}
+
+setCards(data ?? []);
+setLoadingCards(false);
     };
 
     loadDashboard();
@@ -223,34 +291,81 @@ export default function Home() {
             ) : (
               <div className="space-y-3">
                 {cards.map((card) => (
-                  <div
-                    key={card.id}
-                    className="flex items-center gap-4 rounded-xl border border-slate-100 p-4 transition hover:border-slate-200 hover:bg-slate-50"
-                  >
-                    <div className="flex h-12 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-xs font-bold text-white">
-                      CARD
-                    </div>
+  ...
+))}
 
-                    <div className="min-w-0 flex-1">
-                      <h3 className="truncate text-sm font-semibold">
-                        {card.name}
-                      </h3>
+{deleteError && (
+  <p className="mt-3 text-sm text-red-600">
+    {deleteError}
+  </p>
+)}
+  <div
+    key={card.id}
+    className="relative flex items-center gap-4 rounded-xl border border-slate-100 p-4 transition hover:border-slate-200 hover:bg-slate-50"
+  >
+    <div className="flex h-12 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-xs font-bold text-white">
+      CARD
+    </div>
 
-                      <p className="mt-1 truncate text-xs text-slate-500">
-                        {card.bank} · {card.network}
-                      </p>
+    <div className="min-w-0 flex-1">
+      <h3 className="truncate text-sm font-semibold">
+        {card.name}
+      </h3>
 
-                      {card.variant && (
-                        <p className="mt-1 truncate text-xs text-slate-400">
-                          {card.variant}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+      <p className="mt-1 truncate text-xs text-slate-500">
+        {card.bank} · {card.network}
+      </p>
+
+      {card.variant && (
+        <p className="mt-1 truncate text-xs text-slate-400">
+          {card.variant}
+        </p>
+      )}
+    </div>
+
+    {/* Card actions */}
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() =>
+          setOpenMenuId(
+            openMenuId === card.id ? null : card.id
+          )
+        }
+        className="flex h-9 w-9 items-center justify-center rounded-lg text-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+        aria-label={`Options for ${card.name}`}
+      >
+        ⋮
+      </button>
+
+      {openMenuId === card.id && (
+        <div className="absolute right-0 top-10 z-20 w-40 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+          <button
+            type="button"
+            onClick={() => {
+              setOpenMenuId(null);
+              router.push(`/cards/add?edit=${card.id}`);
+            }}
+            className="block w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+          >
+            Edit card
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleDeleteCard(card.id)}
+            disabled={deletingCardId === card.id}
+            className="block w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {deletingCardId === card.id
+              ? "Deleting..."
+              : "Delete card"}
+          </button>
+        </div>
+      )}
+    </div>
+  </div>
+))}
 
           {/* Rewards */}
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
