@@ -1,48 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import CardIQHeader from "@/components/CardIQHeader";
 
 type Card = {
-  id: number;
+  id: string;
   name: string;
   bank: string;
   network: string;
-  variant: string;
-  reward: string;
-  color: string;
+  variant: string | null;
 };
-
-const cards: Card[] = [
-  {
-    id: 1,
-    name: "HDFC Infinia",
-    bank: "HDFC Bank",
-    network: "Visa",
-    variant: "Infinia Metal",
-    reward: "3.3%+",
-    color: "bg-slate-900",
-  },
-  {
-    id: 2,
-    name: "Axis Atlas",
-    bank: "Axis Bank",
-    network: "Visa",
-    variant: "Atlas",
-    reward: "2%+",
-    color: "bg-blue-700",
-  },
-  {
-    id: 3,
-    name: "Amex MRCC",
-    bank: "American Express",
-    network: "Amex",
-    variant: "Membership Rewards",
-    reward: "1%+",
-    color: "bg-sky-600",
-  },
-];
 
 const quickActions = [
   {
@@ -68,11 +36,13 @@ const quickActions = [
 ];
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState("Overview");
+  const [cards, setCards] = useState<Card[]>([]);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [loadingCards, setLoadingCards] = useState(true);
+  const [cardError, setCardError] = useState("");
 
   useEffect(() => {
-    const checkAuth = async () => {
+    const loadDashboard = async () => {
       const supabase = createClient();
 
       const {
@@ -85,9 +55,24 @@ export default function Home() {
       }
 
       setCheckingAuth(false);
+
+      const { data, error } = await supabase
+        .from("cards")
+        .select("id, name, bank, network, variant")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        setCardError("Unable to load your cards.");
+        setLoadingCards(false);
+        return;
+      }
+
+      setCards(data ?? []);
+      setLoadingCards(false);
     };
 
-    checkAuth();
+    loadDashboard();
   }, []);
 
   if (checkingAuth) {
@@ -98,14 +83,13 @@ export default function Home() {
     );
   }
 
-    return (
+  return (
     <main className="min-h-screen bg-[#f7f8fa] text-slate-900">
       {/* Header */}
       <CardIQHeader />
 
       {/* Main */}
       <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8 lg:py-10">
-
         {/* Welcome */}
         <section className="mb-8">
           <p className="mb-2 text-sm font-medium text-slate-500">
@@ -201,35 +185,60 @@ export default function Home() {
               </button>
             </div>
 
-            <div className="space-y-3">
-              {cards.map((card) => (
-                <div
-                  key={card.id}
-                  className="flex items-center gap-4 rounded-xl border border-slate-100 p-4 transition hover:border-slate-200 hover:bg-slate-50"
-                >
+            {loadingCards ? (
+              <div className="rounded-xl border border-slate-100 p-6 text-center">
+                <p className="text-sm text-slate-500">
+                  Loading your cards...
+                </p>
+              </div>
+            ) : cardError ? (
+              <div className="rounded-xl border border-red-100 bg-red-50 p-6 text-center">
+                <p className="text-sm text-red-600">{cardError}</p>
+              </div>
+            ) : cards.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center">
+                <p className="text-sm font-medium text-slate-700">
+                  You haven&apos;t added any cards yet.
+                </p>
+
+                <p className="mt-2 text-xs text-slate-500">
+                  Add your first card to start building your CardIQ portfolio.
+                </p>
+
+                <button className="mt-4 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">
+                  Add your first card
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {cards.map((card) => (
                   <div
-                    className={`flex h-12 w-16 shrink-0 items-center justify-center rounded-lg ${card.color} text-xs font-bold text-white`}
+                    key={card.id}
+                    className="flex items-center gap-4 rounded-xl border border-slate-100 p-4 transition hover:border-slate-200 hover:bg-slate-50"
                   >
-                    CARD
-                  </div>
+                    <div className="flex h-12 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-xs font-bold text-white">
+                      CARD
+                    </div>
 
-                  <div className="min-w-0 flex-1">
-                    <h3 className="truncate text-sm font-semibold">
-                      {card.name}
-                    </h3>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="truncate text-sm font-semibold">
+                        {card.name}
+                      </h3>
 
-                    <p className="mt-1 truncate text-xs text-slate-500">
-                      {card.bank} · {card.network}
-                    </p>
-                  </div>
+                      <p className="mt-1 truncate text-xs text-slate-500">
+                        {card.bank} · {card.network}
+                      </p>
 
-                  <div className="text-right">
-                    <p className="text-sm font-semibold">{card.reward}</p>
-                    <p className="mt-1 text-xs text-slate-400">value</p>
+                      {card.variant && (
+                        <p className="mt-1 truncate text-xs text-slate-400">
+                          {card.variant}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Rewards */}
@@ -244,9 +253,7 @@ export default function Home() {
             <div className="rounded-xl bg-slate-50 p-5">
               <p className="text-sm text-slate-500">Estimated value earned</p>
 
-              <p className="mt-2 text-3xl font-bold tracking-tight">
-                ₹0
-              </p>
+              <p className="mt-2 text-3xl font-bold tracking-tight">₹0</p>
 
               <p className="mt-2 text-xs text-slate-400">
                 Start tracking purchases to build your rewards history.
@@ -296,7 +303,7 @@ export default function Home() {
         </section>
 
         {/* Footer */}
-                <footer className="mt-12 border-t border-slate-200 pt-6 text-xs text-slate-400">
+        <footer className="mt-12 border-t border-slate-200 pt-6 text-xs text-slate-400">
           <div className="flex flex-col justify-between gap-2 sm:flex-row">
             <span>CardIQ</span>
             <span>Make every card spend count.</span>
