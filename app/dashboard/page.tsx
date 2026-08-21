@@ -106,8 +106,6 @@ export default function Home() {
       {/* Main */}
       <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8 lg:py-10">
 
-      {/* Main */}
-      <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8 lg:py-10">
         {/* Welcome */}
         <section className="mb-8">
           <p className="mb-2 text-sm font-medium text-slate-500">
@@ -303,8 +301,9 @@ export default function Home() {
             <span>CardIQ</span>
             <span>Make every card spend count.</span>
           </div>
-        </footer>
-      </div>
-    </main>
-  );
-}
+          <footer>
+            ...
+          </footer>
+        </div>
+      </main>
+    );
