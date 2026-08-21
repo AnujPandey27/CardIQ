@@ -5,9 +5,43 @@ import { createClient } from "@/lib/supabase/client";
 import CardIQHeader from "@/components/CardIQHeader";
 
 export default function ProfilePage() {
+  const handleSaveChanges = async () => {
+  setSaving(true);
+  setSaveMessage("");
+  setSaveError("");
+
+  const supabase = createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    window.location.href = "/login";
+    return;
+  }
+
+  const { error } = await supabase.auth.updateUser({
+    data: {
+      full_name: name.trim(),
+    },
+  });
+
+  if (error) {
+    setSaveError(error.message);
+    setSaving(false);
+    return;
+  }
+
+  setSaveMessage("Your profile has been saved.");
+  setSaving(false);
+};
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("");
+  const [saveError, setSaveError] = useState("");
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -106,9 +140,28 @@ export default function ProfilePage() {
               </p>
             </div>
 
-            <button
-              type="button"
-              className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+            <div className="flex flex-col items-start gap-3">
+  <button
+    type="button"
+    onClick={handleSaveChanges}
+    disabled={saving}
+    className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+  >
+    {saving ? "Saving..." : "Save changes"}
+  </button>
+
+  {saveMessage && (
+    <p className="text-sm text-green-600">
+      {saveMessage}
+    </p>
+  )}
+
+  {saveError && (
+    <p className="text-sm text-red-600">
+      {saveError}
+    </p>
+  )}
+</div>
             >
               Save changes
             </button>
