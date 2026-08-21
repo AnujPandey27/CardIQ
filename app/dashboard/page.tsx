@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
+import CardIQHeader from "@/components/CardIQHeader";
 
 type Card = {
   id: number;
@@ -100,7 +101,13 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[#f7f8fa] text-slate-900">
       {/* Navigation */}
-      <nav className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
+return (
+  <main className="min-h-screen bg-[#f7f8fa] text-slate-900">
+
+    <CardIQHeader />
+
+    {/* Main */}
+    <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8 lg:py-10">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 lg:px-8">
           <div className="flex items-center gap-10">
             <div className="text-xl font-bold tracking-tight">CardIQ</div>
