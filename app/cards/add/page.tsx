@@ -1362,8 +1362,8 @@ function AddCardForm() {
 
   if (loadingProfile) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#f7f8fa] text-slate-900">
-        <p className="text-sm text-slate-500">
+      <main className="flex min-h-screen items-center justify-center bg-[var(--background)] text-[var(--foreground)]">
+        <p className="text-sm text-[var(--muted)]">
           Loading your profile...
         </p>
       </main>
@@ -1371,7 +1371,7 @@ function AddCardForm() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f7f8fa] text-slate-900">
+    <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
       <CardIQHeader />
 
       <div className="mx-auto max-w-3xl px-5 py-8 lg:px-8 lg:py-12">
@@ -1382,12 +1382,12 @@ function AddCardForm() {
             onClick={() =>
               router.push("/dashboard")
             }
-            className="mb-5 text-sm font-medium text-slate-500 transition hover:text-slate-900"
+            className="mb-5 text-sm font-medium text-[var(--muted)] transition hover:text-[var(--foreground)]"
           >
             ← Back to dashboard
           </button>
 
-          <p className="mb-2 text-sm font-medium text-slate-500">
+          <p className="mb-2 text-sm font-medium text-[var(--muted)]">
             Your card portfolio
           </p>
 
@@ -1397,7 +1397,7 @@ function AddCardForm() {
               : "Add a card"}
           </h1>
 
-          <p className="mt-3 max-w-2xl text-base leading-7 text-slate-500">
+          <p className="mt-3 max-w-2xl text-base leading-7 text-[var(--muted)]">
             {isEditMode
               ? "Update your card details and keep your CardIQ portfolio accurate."
               : "Add your credit card to CardIQ so we can track it and help identify the best value for your spending."}
@@ -1405,8 +1405,8 @@ function AddCardForm() {
         </div>
 
         {/* Current Profile */}
-        <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+        <div className="mb-6 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm">
+          <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
             {isEditMode
               ? "Editing card in"
               : "Adding card to"}
@@ -1414,16 +1414,16 @@ function AddCardForm() {
 
           <div className="mt-2 flex items-center justify-between gap-4">
             <div>
-              <p className="font-semibold text-slate-900">
+              <p className="font-semibold">
                 {profileName}
               </p>
 
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="mt-1 text-sm text-[var(--muted)]">
                 {countryCode} · {currencyCode}
               </p>
             </div>
 
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
               Current profile
             </span>
           </div>
@@ -1432,7 +1432,7 @@ function AddCardForm() {
         {/* Form */}
         <form
           onSubmit={handleSubmit}
-          className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
+          className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm sm:p-8"
         >
           <div className="space-y-6">
             {/* Bank */}
@@ -1453,7 +1453,7 @@ function AddCardForm() {
                       event.target.value
                     )
                   }
-                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
                   required
                 >
                   <option value="">
@@ -1485,7 +1485,7 @@ function AddCardForm() {
                       )
                     }
                     placeholder="Enter bank / issuer"
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
                     required
                   />
 
@@ -1500,7 +1500,7 @@ function AddCardForm() {
                       setManualCardName("");
                       setManualVariant("");
                     }}
-                    className="mt-2 text-xs font-semibold text-slate-500 hover:text-slate-900"
+                    className="mt-2 text-xs font-semibold text-[var(--muted)] hover:text-[var(--foreground)]"
                   >
                     ← Choose from listed banks
                   </button>
@@ -1529,7 +1529,7 @@ function AddCardForm() {
                   disabled={
                     !bank || isManualBank
                   }
-                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:focus:border-slate-500 dark:focus:ring-slate-700 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
                   required
                 >
                   <option value="">
@@ -1567,7 +1567,7 @@ function AddCardForm() {
                       )
                     }
                     placeholder="Enter card name"
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
                     required
                   />
 
@@ -1580,7 +1580,7 @@ function AddCardForm() {
                       setManualVariant("");
                       setNetwork("");
                     }}
-                    className="mt-2 text-xs font-semibold text-slate-500 hover:text-slate-900"
+                    className="mt-2 text-xs font-semibold text-[var(--muted)] hover:text-[var(--foreground)]"
                   >
                     ← Choose from listed cards
                   </button>
@@ -1609,7 +1609,7 @@ function AddCardForm() {
                   disabled={
                     !cardName || isManualCard
                   }
-                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:focus:border-slate-500 dark:focus:ring-slate-700 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
                   required
                 >
                   <option value="">
@@ -1649,7 +1649,7 @@ function AddCardForm() {
                       )
                     }
                     placeholder="Enter card variant"
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
                     required
                   />
 
@@ -1660,7 +1660,7 @@ function AddCardForm() {
                       setManualVariant("");
                       setNetwork("");
                     }}
-                    className="mt-2 text-xs font-semibold text-slate-500 hover:text-slate-900"
+                    className="mt-2 text-xs font-semibold text-[var(--muted)] hover:text-[var(--foreground)]"
                   >
                     ← Choose from listed variants
                   </button>
@@ -1675,11 +1675,11 @@ function AddCardForm() {
                   Network
                 </label>
 
-                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--card-muted)] px-4 py-3 text-sm font-medium text-[var(--foreground)]">
                   {availableNetworks[0]}
                 </div>
 
-                <p className="mt-2 text-xs text-slate-400">
+                <p className="mt-2 text-xs text-[var(--muted)]">
                   CardIQ automatically determined the network from the selected
                   card variant.
                 </p>
@@ -1702,7 +1702,7 @@ function AddCardForm() {
                   disabled={
                     !variant && !isManualVariant
                   }
-                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:focus:border-slate-500 dark:focus:ring-slate-700 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
                   required
                 >
                   <option value="">
@@ -1746,19 +1746,19 @@ function AddCardForm() {
 
             {/* Error */}
             {error && (
-              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
                 {error}
               </div>
             )}
 
             {/* Actions */}
-            <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-6 sm:flex-row sm:justify-end">
+            <div className="flex flex-col-reverse gap-3 border-t border-[var(--border)] pt-6 sm:flex-row sm:justify-end">
               <button
                 type="button"
                 onClick={() =>
                   router.push("/dashboard")
                 }
-                className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-5 py-3 text-sm font-semibold text-[var(--foreground)] transition hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 Cancel
               </button>
@@ -1766,7 +1766,7 @@ function AddCardForm() {
               <button
                 type="submit"
                 disabled={saving}
-                className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
               >
                 {saving
                   ? isEditMode
@@ -1788,8 +1788,8 @@ export default function AddCardPage() {
   return (
     <Suspense
       fallback={
-        <main className="flex min-h-screen items-center justify-center bg-[#f7f8fa] text-slate-900">
-          <p className="text-sm text-slate-500">
+        <main className="flex min-h-screen items-center justify-center bg-[var(--background)] text-[var(--foreground)]">
+          <p className="text-sm text-[var(--muted)]">
             Loading CardIQ...
           </p>
         </main>
