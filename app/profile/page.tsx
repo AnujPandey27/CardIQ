@@ -5,37 +5,6 @@ import { createClient } from "@/lib/supabase/client";
 import CardIQHeader from "@/components/CardIQHeader";
 
 export default function ProfilePage() {
-  const handleSaveChanges = async () => {
-  setSaving(true);
-  setSaveMessage("");
-  setSaveError("");
-
-  const supabase = createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    window.location.href = "/login";
-    return;
-  }
-
-  const { error } = await supabase.auth.updateUser({
-    data: {
-      full_name: name.trim(),
-    },
-  });
-
-  if (error) {
-    setSaveError(error.message);
-    setSaving(false);
-    return;
-  }
-
-  setSaveMessage("Your profile has been saved.");
-  setSaving(false);
-};
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -64,6 +33,38 @@ export default function ProfilePage() {
 
     loadProfile();
   }, []);
+
+  const handleSaveChanges = async () => {
+    setSaving(true);
+    setSaveMessage("");
+    setSaveError("");
+
+    const supabase = createClient();
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      window.location.href = "/login";
+      return;
+    }
+
+    const { error } = await supabase.auth.updateUser({
+      data: {
+        full_name: name.trim(),
+      },
+    });
+
+    if (error) {
+      setSaveError(error.message);
+      setSaving(false);
+      return;
+    }
+
+    setSaveMessage("Your profile has been saved.");
+    setSaving(false);
+  };
 
   if (loading) {
     return (
@@ -109,6 +110,7 @@ export default function ProfilePage() {
 
           <div className="space-y-5">
 
+            {/* Name */}
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">
                 Name
@@ -123,6 +125,7 @@ export default function ProfilePage() {
               />
             </div>
 
+            {/* Email */}
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">
                 Email address
@@ -140,31 +143,29 @@ export default function ProfilePage() {
               </p>
             </div>
 
+            {/* Save */}
             <div className="flex flex-col items-start gap-3">
-  <button
-    type="button"
-    onClick={handleSaveChanges}
-    disabled={saving}
-    className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-  >
-    {saving ? "Saving..." : "Save changes"}
-  </button>
+              <button
+                type="button"
+                onClick={handleSaveChanges}
+                disabled={saving}
+                className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {saving ? "Saving..." : "Save changes"}
+              </button>
 
-  {saveMessage && (
-    <p className="text-sm text-green-600">
-      {saveMessage}
-    </p>
-  )}
+              {saveMessage && (
+                <p className="text-sm text-green-600">
+                  {saveMessage}
+                </p>
+              )}
 
-  {saveError && (
-    <p className="text-sm text-red-600">
-      {saveError}
-    </p>
-  )}
-</div>
-            >
-              Save changes
-            </button>
+              {saveError && (
+                <p className="text-sm text-red-600">
+                  {saveError}
+                </p>
+              )}
+            </div>
 
           </div>
         </section>
@@ -183,6 +184,7 @@ export default function ProfilePage() {
 
           <div className="space-y-5">
 
+            {/* Country */}
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">
                 Country / region
@@ -198,6 +200,7 @@ export default function ProfilePage() {
               </p>
             </div>
 
+            {/* Currency */}
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">
                 Display currency
@@ -207,7 +210,9 @@ export default function ProfilePage() {
                 defaultValue="INR"
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
               >
-                <option value="INR">₹ INR — Indian Rupee</option>
+                <option value="INR">
+                  ₹ INR — Indian Rupee
+                </option>
               </select>
             </div>
 
@@ -294,6 +299,7 @@ export default function ProfilePage() {
           </button>
         </section>
 
+        {/* Footer */}
         <footer className="mt-12 border-t border-slate-200 pt-6 text-xs text-slate-400">
           <div className="flex flex-col justify-between gap-2 sm:flex-row">
             <span>CardIQ</span>
