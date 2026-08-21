@@ -98,42 +98,13 @@ export default function Home() {
     );
   }
 
-  return (
+    return (
     <main className="min-h-screen bg-[#f7f8fa] text-slate-900">
-      {/* Navigation */}
-return (
-  <main className="min-h-screen bg-[#f7f8fa] text-slate-900">
+      {/* Header */}
+      <CardIQHeader />
 
-    <CardIQHeader />
-
-    {/* Main */}
-    <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8 lg:py-10">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 lg:px-8">
-          <div className="flex items-center gap-10">
-            <div className="text-xl font-bold tracking-tight">CardIQ</div>
-
-            <div className="hidden items-center gap-7 text-sm font-medium text-slate-500 md:flex">
-              {["Overview", "My Cards", "Rewards", "Discover"].map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`transition ${
-                    activeTab === tab
-                      ? "text-slate-900"
-                      : "hover:text-slate-900"
-                  }`}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <button className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">
-            + Add Card
-          </button>
-        </div>
-      </nav>
+      {/* Main */}
+      <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8 lg:py-10">
 
       {/* Main */}
       <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8 lg:py-10">
