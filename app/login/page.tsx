@@ -73,13 +73,15 @@ window.location.href = "/dashboard";
 
                 <input
                   id="email"
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  placeholder="you@example.com"
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-950 dark:focus:border-slate-400 dark:focus:ring-slate-800"
-                />
+  name="email"
+  type="email"
+  autoComplete="username"
+  required
+  value={email}
+  onChange={(event) => setEmail(event.target.value)}
+  placeholder="you@example.com"
+  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-950 dark:focus:border-slate-400 dark:focus:ring-slate-800"
+/>
               </div>
 
               {/* Password */}
@@ -101,11 +103,13 @@ window.location.href = "/dashboard";
                 </div>
 
                 <input
-                  id="password"
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
+  id="password"
+  name="password"
+  type="password"
+  autoComplete="current-password"
+  required
+  value={password}
+  onChange={(event) => setPassword(event.target.value)}
                   placeholder="Enter your password"
                   className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-950 dark:focus:border-slate-400 dark:focus:ring-slate-800"
                 />
