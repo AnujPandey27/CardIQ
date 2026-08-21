@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import CardIQHeader from "@/components/CardIQHeader";
 
@@ -36,11 +37,13 @@ const quickActions = [
 ];
 
 export default function Home() {
+  const router = useRouter();
+
   const [cards, setCards] = useState<Card[]>([]);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [loadingCards, setLoadingCards] = useState(true);
   const [cardError, setCardError] = useState("");
-
+  
   useEffect(() => {
     const loadDashboard = async () => {
       const supabase = createClient();
@@ -146,8 +149,13 @@ export default function Home() {
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {quickActions.map((action) => (
-              <button
-                key={action.title}
+  <button
+    key={action.title}
+    onClick={() => {
+      if (action.title === "Add Card") {
+        router.push("/cards/add");
+      }
+    }}
                 className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
               >
                 <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-lg font-semibold text-slate-700">
@@ -205,9 +213,12 @@ export default function Home() {
                   Add your first card to start building your CardIQ portfolio.
                 </p>
 
-                <button className="mt-4 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">
-                  Add your first card
-                </button>
+                <button
+  onClick={() => router.push("/cards/add")}
+  className="mt-4 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+>
+  Add your first card
+</button>
               </div>
             ) : (
               <div className="space-y-3">
