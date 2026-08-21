@@ -8,6 +8,7 @@
   --muted: #64748b;
   --border: #e2e8f0;
   --card: #ffffff;
+  --card-muted: #f8fafc;
 }
 
 .dark {
@@ -16,6 +17,7 @@
   --muted: #94a3b8;
   --border: #1e293b;
   --card: #0f172a;
+  --card-muted: #111827;
 }
 
 * {
@@ -25,6 +27,11 @@
 html {
   scroll-behavior: smooth;
   scroll-padding-top: 80px;
+}
+
+html,
+body {
+  min-height: 100%;
 }
 
 body {
