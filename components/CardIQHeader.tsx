@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 
 export default function CardIQHeader() {
   const [loggingOut, setLoggingOut] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -66,20 +67,79 @@ export default function CardIQHeader() {
         {/* Actions */}
         <div className="flex items-center gap-3">
 
-          <button
-            onClick={handleLogout}
-            disabled={loggingOut}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {loggingOut ? "Logging out..." : "Log out"}
-          </button>
-
+          {/* Add Card */}
           <a
             href="/cards/add"
             className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
           >
             + Add Card
           </a>
+
+          {/* Profile Menu */}
+          <div className="relative">
+
+            <button
+              type="button"
+              onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+              className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              <span>Profile</span>
+
+              <span
+                className={`text-xs transition-transform ${
+                  profileMenuOpen ? "rotate-180" : ""
+                }`}
+              >
+                ▼
+              </span>
+            </button>
+
+            {profileMenuOpen && (
+              <div className="absolute right-0 mt-2 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white p-1.5 shadow-lg">
+
+                {/* Profile */}
+                <a
+                  href="/profile"
+                  onClick={() => setProfileMenuOpen(false)}
+                  className="block rounded-xl px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  Profile
+                </a>
+
+                {/* Switch Profile */}
+                <a
+                  href="/profiles"
+                  onClick={() => setProfileMenuOpen(false)}
+                  className="block rounded-xl px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  Switch Profile
+                </a>
+
+                {/* Settings */}
+                <a
+                  href="/profile#settings"
+                  onClick={() => setProfileMenuOpen(false)}
+                  className="block rounded-xl px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  Settings
+                </a>
+
+                <div className="my-1 border-t border-slate-100" />
+
+                {/* Log out */}
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  disabled={loggingOut}
+                  className="block w-full rounded-xl px-4 py-3 text-left text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loggingOut ? "Logging out..." : "Log out"}
+                </button>
+
+              </div>
+            )}
+
+          </div>
 
         </div>
 
