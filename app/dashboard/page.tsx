@@ -156,20 +156,20 @@ export default function Home() {
 
   if (checkingAuth) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#f7f8fa] text-slate-900">
-        <p className="text-sm text-slate-500">Loading CardIQ...</p>
+      <main className="flex min-h-screen items-center justify-center bg-[var(--background)] text-[var(--foreground)]">
+        <p className="text-sm text-[var(--muted)]">Loading CardIQ...</p>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-[#f7f8fa] text-slate-900">
+    <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
       <CardIQHeader />
 
       <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8 lg:py-10">
         {/* Welcome */}
         <section className="mb-8">
-          <p className="mb-2 text-sm font-medium text-slate-500">
+          <p className="mb-2 text-sm font-medium text-[var(--muted)]">
             Your credit card companion
           </p>
 
@@ -179,7 +179,7 @@ export default function Home() {
                 Make every card spend count.
               </h1>
 
-              <p className="mt-3 max-w-2xl text-base leading-7 text-slate-500">
+              <p className="mt-3 max-w-2xl text-base leading-7 text-[var(--muted)]">
                 Manage your cards, find the right card for every purchase,
                 discover better opportunities, and track the rewards you earn.
               </p>
@@ -187,7 +187,7 @@ export default function Home() {
 
             <button
               type="button"
-              className="hidden rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold shadow-sm transition hover:border-slate-300 hover:bg-slate-50 md:block"
+              className="hidden rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-2.5 text-sm font-semibold shadow-sm transition hover:brightness-95 md:block"
             >
               View insights →
             </button>
@@ -195,7 +195,7 @@ export default function Home() {
         </section>
 
         {/* Best Card */}
-        <section className="mb-8 overflow-hidden rounded-2xl bg-slate-900 p-6 text-white shadow-sm sm:p-8">
+        <section className="mb-8 overflow-hidden rounded-2xl bg-slate-900 p-6 text-white shadow-sm dark:bg-slate-800 sm:p-8">
           <div className="flex flex-col justify-between gap-7 lg:flex-row lg:items-center">
             <div className="max-w-xl">
               <div className="mb-3 inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-slate-200">
@@ -237,19 +237,19 @@ export default function Home() {
                     router.push("/cards/add");
                   }
                 }}
-                className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+                className="group rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:brightness-95"
               >
-                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-lg font-semibold text-slate-700">
+                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-lg font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                   {action.icon}
                 </div>
 
                 <h3 className="font-semibold">{action.title}</h3>
 
-                <p className="mt-1 text-sm leading-5 text-slate-500">
+                <p className="mt-1 text-sm leading-5 text-[var(--muted)]">
                   {action.description}
                 </p>
 
-                <span className="mt-4 block text-xs font-semibold text-slate-400 transition group-hover:text-slate-700">
+                <span className="mt-4 block text-xs font-semibold text-slate-400 transition group-hover:text-slate-700 dark:text-slate-500 dark:group-hover:text-slate-200">
                   Open →
                 </span>
               </button>
@@ -260,47 +260,50 @@ export default function Home() {
         {/* Portfolio + Rewards */}
         <section className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
           {/* My Cards */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
             <div className="mb-6 flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold">My Cards</h2>
-                <p className="mt-1 text-sm text-slate-500">
+
+                <p className="mt-1 text-sm text-[var(--muted)]">
                   Your card portfolio
                 </p>
               </div>
 
               <Link
                 href="/cards"
-                className="text-sm font-semibold text-slate-600 transition hover:text-slate-900"
+                className="text-sm font-semibold text-[var(--muted)] transition hover:text-[var(--foreground)]"
               >
                 View all →
               </Link>
             </div>
 
             {loadingCards ? (
-              <div className="rounded-xl border border-slate-100 p-6 text-center">
-                <p className="text-sm text-slate-500">
+              <div className="rounded-xl border border-[var(--border)] p-6 text-center">
+                <p className="text-sm text-[var(--muted)]">
                   Loading your cards...
                 </p>
               </div>
             ) : cardError ? (
-              <div className="rounded-xl border border-red-100 bg-red-50 p-6 text-center">
-                <p className="text-sm text-red-600">{cardError}</p>
+              <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-center dark:border-red-900 dark:bg-red-950/30">
+                <p className="text-sm text-red-600 dark:text-red-300">
+                  {cardError}
+                </p>
               </div>
             ) : cards.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center">
-                <p className="text-sm font-medium text-slate-700">
+              <div className="rounded-xl border border-dashed border-[var(--border)] p-8 text-center">
+                <p className="text-sm font-medium">
                   You haven&apos;t added any cards yet.
                 </p>
 
-                <p className="mt-2 text-xs text-slate-500">
+                <p className="mt-2 text-xs text-[var(--muted)]">
                   Add your first card to start building your CardIQ portfolio.
                 </p>
 
                 <button
                   type="button"
                   onClick={() => router.push("/cards/add")}
-                  className="mt-4 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+                  className="mt-4 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
                 >
                   Add your first card
                 </button>
@@ -311,9 +314,9 @@ export default function Home() {
                   {cards.map((card) => (
                     <div
                       key={card.id}
-                      className="relative flex items-center gap-4 rounded-xl border border-slate-100 p-4 transition hover:border-slate-200 hover:bg-slate-50"
+                      className="relative flex items-center gap-4 rounded-xl border border-[var(--border)] p-4 transition hover:brightness-95"
                     >
-                      <div className="flex h-12 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-xs font-bold text-white">
+                      <div className="flex h-12 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-xs font-bold text-white dark:bg-slate-700">
                         CARD
                       </div>
 
@@ -322,12 +325,12 @@ export default function Home() {
                           {card.name}
                         </h3>
 
-                        <p className="mt-1 truncate text-xs text-slate-500">
+                        <p className="mt-1 truncate text-xs text-[var(--muted)]">
                           {card.bank} · {card.network}
                         </p>
 
                         {card.variant && (
-                          <p className="mt-1 truncate text-xs text-slate-400">
+                          <p className="mt-1 truncate text-xs text-[var(--muted)]">
                             {card.variant}
                           </p>
                         )}
@@ -341,21 +344,21 @@ export default function Home() {
                               openMenuId === card.id ? null : card.id
                             )
                           }
-                          className="flex h-9 w-9 items-center justify-center rounded-lg text-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                          className="flex h-9 w-9 items-center justify-center rounded-lg text-lg text-[var(--muted)] transition hover:bg-slate-100 hover:text-[var(--foreground)] dark:hover:bg-slate-800"
                           aria-label={`Options for ${card.name}`}
                         >
                           ⋮
                         </button>
 
                         {openMenuId === card.id && (
-                          <div className="absolute right-0 top-10 z-20 w-40 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+                          <div className="absolute right-0 top-10 z-20 w-40 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] p-1 shadow-lg">
                             <button
                               type="button"
                               onClick={() => {
                                 setOpenMenuId(null);
                                 router.push(`/cards/add?edit=${card.id}`);
                               }}
-                              className="block w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                              className="block w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium transition hover:bg-slate-100 dark:hover:bg-slate-800"
                             >
                               Edit card
                             </button>
@@ -364,7 +367,7 @@ export default function Home() {
                               type="button"
                               onClick={() => handleDeleteCard(card.id)}
                               disabled={deletingCardId === card.id}
-                              className="block w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                              className="block w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-red-950/30"
                             >
                               {deletingCardId === card.id
                                 ? "Deleting..."
@@ -378,7 +381,7 @@ export default function Home() {
                 </div>
 
                 {deleteError && (
-                  <p className="mt-3 text-sm text-red-600">
+                  <p className="mt-3 text-sm text-red-600 dark:text-red-300">
                     {deleteError}
                   </p>
                 )}
@@ -387,16 +390,19 @@ export default function Home() {
           </div>
 
           {/* Rewards */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
             <div className="mb-6">
-              <h2 className="text-lg font-semibold">Rewards snapshot</h2>
-              <p className="mt-1 text-sm text-slate-500">
+              <h2 className="text-lg font-semibold">
+                Rewards snapshot
+              </h2>
+
+              <p className="mt-1 text-sm text-[var(--muted)]">
                 Your portfolio at a glance
               </p>
             </div>
 
-            <div className="rounded-xl bg-slate-50 p-5">
-              <p className="text-sm text-slate-500">
+            <div className="rounded-xl bg-[var(--card-muted)] p-5">
+              <p className="text-sm text-[var(--muted)]">
                 Estimated value earned
               </p>
 
@@ -404,26 +410,36 @@ export default function Home() {
                 ₹0
               </p>
 
-              <p className="mt-2 text-xs text-slate-400">
+              <p className="mt-2 text-xs text-[var(--muted)]">
                 Start tracking purchases to build your rewards history.
               </p>
             </div>
 
             <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-slate-100 p-4">
-                <p className="text-xs text-slate-500">Purchases</p>
-                <p className="mt-1 text-lg font-semibold">0</p>
+              <div className="rounded-xl border border-[var(--border)] p-4">
+                <p className="text-xs text-[var(--muted)]">
+                  Purchases
+                </p>
+
+                <p className="mt-1 text-lg font-semibold">
+                  0
+                </p>
               </div>
 
-              <div className="rounded-xl border border-slate-100 p-4">
-                <p className="text-xs text-slate-500">Rewards</p>
-                <p className="mt-1 text-lg font-semibold">₹0</p>
+              <div className="rounded-xl border border-[var(--border)] p-4">
+                <p className="text-xs text-[var(--muted)]">
+                  Rewards
+                </p>
+
+                <p className="mt-1 text-lg font-semibold">
+                  ₹0
+                </p>
               </div>
             </div>
 
             <button
               type="button"
-              className="mt-5 w-full rounded-xl border border-slate-200 py-2.5 text-sm font-semibold transition hover:bg-slate-50"
+              className="mt-5 w-full rounded-xl border border-[var(--border)] py-2.5 text-sm font-semibold transition hover:bg-slate-100 dark:hover:bg-slate-800"
             >
               Track a purchase
             </button>
@@ -431,10 +447,10 @@ export default function Home() {
         </section>
 
         {/* Discover */}
-        <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <section className="mt-8 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm sm:p-8">
           <div className="flex flex-col justify-between gap-5 md:flex-row md:items-center">
             <div>
-              <p className="text-sm font-medium text-slate-500">
+              <p className="text-sm font-medium text-[var(--muted)]">
                 Explore CardIQ
               </p>
 
@@ -442,7 +458,7 @@ export default function Home() {
                 Discover more ways to get value from your cards.
               </h2>
 
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)]">
                 Compare cards, explore rewards, discover premium benefits,
                 travel opportunities, shopping offers and more.
               </p>
@@ -450,7 +466,7 @@ export default function Home() {
 
             <button
               type="button"
-              className="shrink-0 rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold transition hover:bg-slate-50"
+              className="shrink-0 rounded-xl border border-[var(--border)] px-5 py-3 text-sm font-semibold transition hover:bg-slate-100 dark:hover:bg-slate-800"
             >
               Explore CardIQ →
             </button>
@@ -458,7 +474,7 @@ export default function Home() {
         </section>
 
         {/* Footer */}
-        <footer className="mt-12 border-t border-slate-200 pt-6 text-xs text-slate-400">
+        <footer className="mt-12 border-t border-[var(--border)] pt-6 text-xs text-[var(--muted)]">
           <div className="flex flex-col justify-between gap-2 sm:flex-row">
             <span>CardIQ</span>
             <span>Make every card spend count.</span>
