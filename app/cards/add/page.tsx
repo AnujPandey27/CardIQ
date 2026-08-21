@@ -1059,6 +1059,12 @@ function AddCardForm() {
   const isManualCard = cardName === MANUAL_VALUE;
   const isManualVariant = variant === MANUAL_VALUE;
 
+  const availableNetworks = selectedVariant?.networks ?? [];
+
+  const hasSingleKnownNetwork =
+    !isManualVariant &&
+    availableNetworks.length === 1;
+
   useEffect(() => {
     const loadPage = async () => {
       const supabase = createClient();
@@ -1104,13 +1110,11 @@ function AddCardForm() {
       setCountryCode(profile.country_code);
       setCurrencyCode(profile.currency_code);
 
-      // Add mode
       if (!editCardId) {
         setLoadingProfile(false);
         return;
       }
 
-      // Edit mode
       const { data: card, error: cardError } =
         await supabase
           .from("cards")
@@ -1195,6 +1199,9 @@ function AddCardForm() {
     setCardName("");
     setVariant("");
     setNetwork("");
+    setManualBank(
+      value === MANUAL_VALUE ? manualBank : ""
+    );
     setManualCardName("");
     setManualVariant("");
   };
@@ -1203,14 +1210,19 @@ function AddCardForm() {
     setCardName(value);
     setVariant("");
     setNetwork("");
+    setManualCardName(
+      value === MANUAL_VALUE
+        ? manualCardName
+        : ""
+    );
     setManualVariant("");
   };
 
   const handleVariantChange = (value: string) => {
     setVariant(value);
-    setNetwork("");
 
     if (value === MANUAL_VALUE) {
+      setNetwork("");
       return;
     }
 
@@ -1220,6 +1232,8 @@ function AddCardForm() {
 
     if (option?.networks.length === 1) {
       setNetwork(option.networks[0]);
+    } else {
+      setNetwork("");
     }
   };
 
@@ -1240,6 +1254,10 @@ function AddCardForm() {
     const finalVariant = isManualVariant
       ? manualVariant.trim()
       : variant.trim();
+
+    const finalNetwork = hasSingleKnownNetwork
+      ? availableNetworks[0]
+      : network.trim();
 
     if (!profileId) {
       setError(
@@ -1269,9 +1287,9 @@ function AddCardForm() {
       return;
     }
 
-    if (!network) {
+    if (!finalNetwork) {
       setError(
-        "Please select the card network."
+        "Please select or enter the card network."
       );
       return;
     }
@@ -1297,7 +1315,7 @@ function AddCardForm() {
             .update({
               name: finalCardName,
               bank: finalBank,
-              network,
+              network: finalNetwork,
               variant: finalVariant,
             })
             .eq("id", editCardId)
@@ -1316,7 +1334,7 @@ function AddCardForm() {
               profile_id: profileId,
               name: finalCardName,
               bank: finalBank,
-              network,
+              network: finalNetwork,
               variant: finalVariant,
             });
 
@@ -1352,16 +1370,11 @@ function AddCardForm() {
     );
   }
 
-  const displayedNetworks =
-    selectedVariant?.networks ??
-    FALLBACK_NETWORKS;
-
   return (
     <main className="min-h-screen bg-[#f7f8fa] text-slate-900">
       <CardIQHeader />
 
       <div className="mx-auto max-w-3xl px-5 py-8 lg:px-8 lg:py-12">
-
         {/* Header */}
         <div className="mb-8">
           <button
@@ -1422,7 +1435,6 @@ function AddCardForm() {
           className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
         >
           <div className="space-y-6">
-
             {/* Bank */}
             <div>
               <label
@@ -1514,7 +1526,9 @@ function AddCardForm() {
                       event.target.value
                     )
                   }
-                  disabled={!bank || isManualBank}
+                  disabled={
+                    !bank || isManualBank
+                  }
                   className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
                   required
                 >
@@ -1655,52 +1669,80 @@ function AddCardForm() {
             </div>
 
             {/* Network */}
-            <div>
-              <label
-                htmlFor="network"
-                className="mb-2 block text-sm font-semibold"
-              >
-                Network
-              </label>
+            {hasSingleKnownNetwork ? (
+              <div>
+                <label className="mb-2 block text-sm font-semibold">
+                  Network
+                </label>
 
-              <select
-                id="network"
-                value={network}
-                onChange={(event) =>
-                  setNetwork(event.target.value)
-                }
-                disabled={
-                  !variant && !isManualVariant
-                }
-                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
-                required
-              >
-                <option value="">
-                  {variant || isManualVariant
-                    ? "Select network"
-                    : "Select a card variant first"}
-                </option>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
+                  {availableNetworks[0]}
+                </div>
 
-                {displayedNetworks.map(
-                  (item) => (
-                    <option
-                      key={item}
-                      value={item}
-                    >
-                      {item}
-                    </option>
-                  )
-                )}
+                <p className="mt-2 text-xs text-slate-400">
+                  CardIQ automatically determined the network from the selected
+                  card variant.
+                </p>
+              </div>
+            ) : (
+              <div>
+                <label
+                  htmlFor="network"
+                  className="mb-2 block text-sm font-semibold"
+                >
+                  Network
+                </label>
 
-                {!displayedNetworks.includes(
-                  "Other"
-                ) && (
-                  <option value="Other">
-                    Other
+                <select
+                  id="network"
+                  value={network}
+                  onChange={(event) =>
+                    setNetwork(event.target.value)
+                  }
+                  disabled={
+                    !variant && !isManualVariant
+                  }
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                  required
+                >
+                  <option value="">
+                    {variant || isManualVariant
+                      ? "Select network"
+                      : "Select a card variant first"}
                   </option>
-                )}
-              </select>
-            </div>
+
+                  {availableNetworks.length > 0
+                    ? availableNetworks.map(
+                        (item) => (
+                          <option
+                            key={item}
+                            value={item}
+                          >
+                            {item}
+                          </option>
+                        )
+                      )
+                    : FALLBACK_NETWORKS.map(
+                        (item) => (
+                          <option
+                            key={item}
+                            value={item}
+                          >
+                            {item}
+                          </option>
+                        )
+                      )}
+
+                  {!availableNetworks.includes(
+                    "Other"
+                  ) && (
+                    <option value="Other">
+                      Other
+                    </option>
+                  )}
+                </select>
+              </div>
+            )}
 
             {/* Error */}
             {error && (
