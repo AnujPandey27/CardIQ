@@ -72,6 +72,12 @@ export default function Home() {
       return;
     }
 
+    if (!profileId) {
+      setDeleteError("Your current profile could not be identified.");
+      setDeletingCardId(null);
+      return;
+    }
+
     const { error } = await supabase
       .from("cards")
       .delete()
@@ -80,6 +86,7 @@ export default function Home() {
       .eq("profile_id", profileId);
 
     if (error) {
+      console.error(error);
       setDeleteError("Unable to delete this card.");
       setDeletingCardId(null);
       return;
@@ -93,8 +100,6 @@ export default function Home() {
     setDeletingCardId(null);
   };
 
-  useEffect(() => {
-  
   useEffect(() => {
     const loadDashboard = async () => {
       const supabase = createClient();
@@ -110,37 +115,39 @@ export default function Home() {
 
       setCheckingAuth(false);
 
-const { data: profile, error: profileError } = await supabase
-  .from("profiles")
-  .select("id")
-  .eq("user_id", user.id)
-  .order("is_default", { ascending: false })
-  .order("created_at", { ascending: true })
-  .limit(1)
-  .maybeSingle();
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("user_id", user.id)
+        .order("is_default", { ascending: false })
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
 
-if (profileError || !profile) {
-  setCardError("Unable to load your current profile.");
-  setLoadingCards(false);
-  return;
-}
+      if (profileError || !profile) {
+        console.error(profileError);
+        setCardError("Unable to load your current profile.");
+        setLoadingCards(false);
+        return;
+      }
 
-setProfileId(profile.id);
+      setProfileId(profile.id);
 
-const { data, error } = await supabase
-  .from("cards")
-  .select("id, name, bank, network, variant, profile_id")
-  .eq("profile_id", profile.id)
-  .order("created_at", { ascending: false });
+      const { data, error } = await supabase
+        .from("cards")
+        .select("id, name, bank, network, variant, profile_id")
+        .eq("profile_id", profile.id)
+        .order("created_at", { ascending: false });
 
-if (error) {
-  setCardError("Unable to load your cards.");
-  setLoadingCards(false);
-  return;
-}
+      if (error) {
+        console.error(error);
+        setCardError("Unable to load your cards.");
+        setLoadingCards(false);
+        return;
+      }
 
-setCards(data ?? []);
-setLoadingCards(false);
+      setCards(data ?? []);
+      setLoadingCards(false);
     };
 
     loadDashboard();
@@ -179,7 +186,10 @@ setLoadingCards(false);
               </p>
             </div>
 
-            <button className="hidden rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold shadow-sm transition hover:border-slate-300 hover:bg-slate-50 md:block">
+            <button
+              type="button"
+              className="hidden rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold shadow-sm transition hover:border-slate-300 hover:bg-slate-50 md:block"
+            >
               View insights →
             </button>
           </div>
@@ -203,7 +213,10 @@ setLoadingCards(false);
               </p>
             </div>
 
-            <button className="shrink-0 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100">
+            <button
+              type="button"
+              className="shrink-0 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
+            >
               Find my best card →
             </button>
           </div>
@@ -217,13 +230,14 @@ setLoadingCards(false);
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {quickActions.map((action) => (
-  <button
-    key={action.title}
-    onClick={() => {
-      if (action.title === "Add Card") {
-        router.push("/cards/add");
-      }
-    }}
+              <button
+                key={action.title}
+                type="button"
+                onClick={() => {
+                  if (action.title === "Add Card") {
+                    router.push("/cards/add");
+                  }
+                }}
                 className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
               >
                 <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-lg font-semibold text-slate-700">
@@ -256,7 +270,10 @@ setLoadingCards(false);
                 </p>
               </div>
 
-              <button className="text-sm font-semibold text-slate-600 hover:text-slate-900">
+              <button
+                type="button"
+                className="text-sm font-semibold text-slate-600 hover:text-slate-900"
+              >
                 View all →
               </button>
             </div>
@@ -282,90 +299,94 @@ setLoadingCards(false);
                 </p>
 
                 <button
-  onClick={() => router.push("/cards/add")}
-  className="mt-4 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
->
-  Add your first card
-</button>
+                  type="button"
+                  onClick={() => router.push("/cards/add")}
+                  className="mt-4 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+                >
+                  Add your first card
+                </button>
               </div>
             ) : (
-              <div className="space-y-3">
-                {cards.map((card) => (
-  ...
-))}
+              <>
+                <div className="space-y-3">
+                  {cards.map((card) => (
+                    <div
+                      key={card.id}
+                      className="relative flex items-center gap-4 rounded-xl border border-slate-100 p-4 transition hover:border-slate-200 hover:bg-slate-50"
+                    >
+                      <div className="flex h-12 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-xs font-bold text-white">
+                        CARD
+                      </div>
 
-{deleteError && (
-  <p className="mt-3 text-sm text-red-600">
-    {deleteError}
-  </p>
-)}
-  <div
-    key={card.id}
-    className="relative flex items-center gap-4 rounded-xl border border-slate-100 p-4 transition hover:border-slate-200 hover:bg-slate-50"
-  >
-    <div className="flex h-12 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-xs font-bold text-white">
-      CARD
-    </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="truncate text-sm font-semibold">
+                          {card.name}
+                        </h3>
 
-    <div className="min-w-0 flex-1">
-      <h3 className="truncate text-sm font-semibold">
-        {card.name}
-      </h3>
+                        <p className="mt-1 truncate text-xs text-slate-500">
+                          {card.bank} · {card.network}
+                        </p>
 
-      <p className="mt-1 truncate text-xs text-slate-500">
-        {card.bank} · {card.network}
-      </p>
+                        {card.variant && (
+                          <p className="mt-1 truncate text-xs text-slate-400">
+                            {card.variant}
+                          </p>
+                        )}
+                      </div>
 
-      {card.variant && (
-        <p className="mt-1 truncate text-xs text-slate-400">
-          {card.variant}
-        </p>
-      )}
-    </div>
+                      {/* Card actions */}
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setOpenMenuId(
+                              openMenuId === card.id ? null : card.id
+                            )
+                          }
+                          className="flex h-9 w-9 items-center justify-center rounded-lg text-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                          aria-label={`Options for ${card.name}`}
+                        >
+                          ⋮
+                        </button>
 
-    {/* Card actions */}
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() =>
-          setOpenMenuId(
-            openMenuId === card.id ? null : card.id
-          )
-        }
-        className="flex h-9 w-9 items-center justify-center rounded-lg text-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-        aria-label={`Options for ${card.name}`}
-      >
-        ⋮
-      </button>
+                        {openMenuId === card.id && (
+                          <div className="absolute right-0 top-10 z-20 w-40 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenMenuId(null);
+                                router.push(`/cards/add?edit=${card.id}`);
+                              }}
+                              className="block w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                            >
+                              Edit card
+                            </button>
 
-      {openMenuId === card.id && (
-        <div className="absolute right-0 top-10 z-20 w-40 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
-          <button
-            type="button"
-            onClick={() => {
-              setOpenMenuId(null);
-              router.push(`/cards/add?edit=${card.id}`);
-            }}
-            className="block w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-          >
-            Edit card
-          </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCard(card.id)}
+                              disabled={deletingCardId === card.id}
+                              className="block w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {deletingCardId === card.id
+                                ? "Deleting..."
+                                : "Delete card"}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
-          <button
-            type="button"
-            onClick={() => handleDeleteCard(card.id)}
-            disabled={deletingCardId === card.id}
-            className="block w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {deletingCardId === card.id
-              ? "Deleting..."
-              : "Delete card"}
-          </button>
-        </div>
-      )}
-    </div>
-  </div>
-))}
+                {deleteError && (
+                  <p className="mt-3 text-sm text-red-600">
+                    {deleteError}
+                  </p>
+                )}
+              </>
+            )}
+          </div>
 
           {/* Rewards */}
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -398,7 +419,10 @@ setLoadingCards(false);
               </div>
             </div>
 
-            <button className="mt-5 w-full rounded-xl border border-slate-200 py-2.5 text-sm font-semibold transition hover:bg-slate-50">
+            <button
+              type="button"
+              className="mt-5 w-full rounded-xl border border-slate-200 py-2.5 text-sm font-semibold transition hover:bg-slate-50"
+            >
               Track a purchase
             </button>
           </div>
@@ -422,7 +446,10 @@ setLoadingCards(false);
               </p>
             </div>
 
-            <button className="shrink-0 rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold transition hover:bg-slate-50">
+            <button
+              type="button"
+              className="shrink-0 rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold transition hover:bg-slate-50"
+            >
               Explore CardIQ →
             </button>
           </div>
