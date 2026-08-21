@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import {
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import CardIQHeader from "@/components/CardIQHeader";
 
@@ -998,6 +1001,10 @@ const FALLBACK_NETWORKS = [
 export default function AddCardPage() {
   const router = useRouter();
   const supabase = createClient();
+  
+  const searchParams = useSearchParams();
+const editCardId = searchParams.get("edit");
+const isEditMode = Boolean(editCardId);
 
   const [profileId, setProfileId] = useState("");
   const [profileName, setProfileName] = useState("");
@@ -1044,41 +1051,104 @@ export default function AddCardPage() {
   const isManualVariant = variant === MANUAL_VALUE;
 
   useEffect(() => {
-    const loadProfile = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+  const loadPage = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-      if (!user) {
-        router.push("/login");
-        return;
-      }
+    if (!user) {
+      router.push("/login");
+      return;
+    }
 
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("id, name, country_code, currency_code")
-        .eq("user_id", user.id)
-        .order("is_default", { ascending: false })
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle();
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("id, name, country_code, currency_code")
+      .eq("user_id", user.id)
+      .order("is_default", { ascending: false })
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
 
-      if (profileError || !profile) {
-        console.error(profileError);
-        setError("Unable to load your current profile.");
-        setLoadingProfile(false);
-        return;
-      }
-
-      setProfileId(profile.id);
-      setProfileName(profile.name);
-      setCountryCode(profile.country_code);
-      setCurrencyCode(profile.currency_code);
+    if (profileError || !profile) {
+      console.error(profileError);
+      setError("Unable to load your current profile.");
       setLoadingProfile(false);
-    };
+      return;
+    }
 
-    loadProfile();
-  }, [router, supabase]);
+    setProfileId(profile.id);
+    setProfileName(profile.name);
+    setCountryCode(profile.country_code);
+    setCurrencyCode(profile.currency_code);
+
+    /*
+     * ADD MODE
+     */
+    if (!editCardId) {
+      setLoadingProfile(false);
+      return;
+    }
+
+    /*
+     * EDIT MODE
+     */
+    const { data: card, error: cardError } = await supabase
+      .from("cards")
+      .select(
+        "id, name, bank, network, variant, profile_id"
+      )
+      .eq("id", editCardId)
+      .eq("user_id", user.id)
+      .eq("profile_id", profile.id)
+      .maybeSingle();
+
+    if (cardError || !card) {
+      console.error(cardError);
+      setError("Unable to load the card you are trying to edit.");
+      setLoadingProfile(false);
+      return;
+    }
+
+    setBank(card.bank);
+    setNetwork(card.network);
+    setVariant(card.variant ?? "");
+
+    const catalogueBank = BANKS.find(
+      (item) => item.name === card.bank
+    );
+
+    if (catalogueBank) {
+      setCardName(card.name);
+
+      const catalogueCard = catalogueBank.cards.find(
+        (item) => item.name === card.name
+      );
+
+      const catalogueVariant = catalogueCard?.variants.find(
+        (item) => item.name === card.variant
+      );
+
+      if (!catalogueVariant) {
+        setVariant(MANUAL_VALUE);
+        setManualVariant(card.variant ?? "");
+      }
+    } else {
+      setBank(MANUAL_VALUE);
+      setManualBank(card.bank);
+
+      setCardName(MANUAL_VALUE);
+      setManualCardName(card.name);
+
+      setVariant(MANUAL_VALUE);
+      setManualVariant(card.variant ?? "");
+    }
+
+    setLoadingProfile(false);
+  };
+
+  loadPage();
+}, [editCardId, router, supabase]);
 
   const handleBankChange = (value: string) => {
     setBank(value);
@@ -1170,20 +1240,38 @@ export default function AddCardPage() {
         return;
       }
 
-      const { error: insertError } = await supabase
-        .from("cards")
-        .insert({
-          user_id: user.id,
-          profile_id: profileId,
-          name: finalCardName,
-          bank: finalBank,
-          network,
-          variant: finalVariant,
-        });
+      if (isEditMode && editCardId) {
+  const { error: updateError } = await supabase
+    .from("cards")
+    .update({
+      name: finalCardName,
+      bank: finalBank,
+      network,
+      variant: finalVariant,
+    })
+    .eq("id", editCardId)
+    .eq("user_id", user.id)
+    .eq("profile_id", profileId);
 
-      if (insertError) {
-        throw insertError;
-      }
+  if (updateError) {
+    throw updateError;
+  }
+} else {
+  const { error: insertError } = await supabase
+    .from("cards")
+    .insert({
+      user_id: user.id,
+      profile_id: profileId,
+      name: finalCardName,
+      bank: finalBank,
+      network,
+      variant: finalVariant,
+    });
+
+  if (insertError) {
+    throw insertError;
+  }
+}
 
       router.push("/dashboard");
       router.refresh();
@@ -1233,13 +1321,14 @@ export default function AddCardPage() {
           </p>
 
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            Add a card
+            {isEditMode ? "Edit card" : "Add a card"}
           </h1>
 
-          <p className="mt-3 max-w-2xl text-base leading-7 text-slate-500">
-            Add your credit card to CardIQ so we can track it and help
-            identify the best value for your spending.
-          </p>
+         <p className="mt-3 max-w-2xl text-base leading-7 text-slate-500">
+          {isEditMode
+          ? "Update your card details and keep your CardIQ portfolio accurate."
+          : "Add your credit card to CardIQ so we can track it and help identify the best value for your spending."}
+        </p>
         </div>
 
         <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -1521,7 +1610,13 @@ export default function AddCardPage() {
                 disabled={saving}
                 className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {saving ? "Adding card..." : "Add card"}
+                {saving
+  ? isEditMode
+    ? "Saving changes..."
+    : "Adding card..."
+  : isEditMode
+    ? "Save changes"
+    : "Add card"}
               </button>
             </div>
           </div>
