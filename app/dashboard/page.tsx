@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import CardIQHeader from "@/components/CardIQHeader";
 
@@ -163,10 +164,8 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#f7f8fa] text-slate-900">
-      {/* Header */}
       <CardIQHeader />
 
-      {/* Main */}
       <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8 lg:py-10">
         {/* Welcome */}
         <section className="mb-8">
@@ -270,12 +269,12 @@ export default function Home() {
                 </p>
               </div>
 
-              <button
-                type="button"
-                className="text-sm font-semibold text-slate-600 hover:text-slate-900"
+              <Link
+                href="/cards"
+                className="text-sm font-semibold text-slate-600 transition hover:text-slate-900"
               >
                 View all →
-              </button>
+              </Link>
             </div>
 
             {loadingCards ? (
@@ -334,7 +333,6 @@ export default function Home() {
                         )}
                       </div>
 
-                      {/* Card actions */}
                       <div className="relative">
                         <button
                           type="button"
@@ -398,9 +396,13 @@ export default function Home() {
             </div>
 
             <div className="rounded-xl bg-slate-50 p-5">
-              <p className="text-sm text-slate-500">Estimated value earned</p>
+              <p className="text-sm text-slate-500">
+                Estimated value earned
+              </p>
 
-              <p className="mt-2 text-3xl font-bold tracking-tight">₹0</p>
+              <p className="mt-2 text-3xl font-bold tracking-tight">
+                ₹0
+              </p>
 
               <p className="mt-2 text-xs text-slate-400">
                 Start tracking purchases to build your rewards history.
