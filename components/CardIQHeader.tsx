@@ -3,59 +3,35 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { useCardIQTheme } from "@/components/ThemeProvider";
+import {
+  useCardIQTheme,
+} from "@/components/ThemeProvider";
+import {
+  useCardIQProfile,
+} from "@/components/ProfileProvider";
 
 type Theme = "system" | "light" | "dark";
 
 export default function CardIQHeader() {
-  const [loggingOut, setLoggingOut] = useState(false);
+  const [loggingOut, setLoggingOut] =
+    useState(false);
+
   const [profileMenuOpen, setProfileMenuOpen] =
     useState(false);
-  const [profileName, setProfileName] =
-    useState("Profile");
-  const [mounted, setMounted] = useState(false);
 
-  const { theme, setTheme } = useCardIQTheme();
+  const [mounted, setMounted] =
+    useState(false);
+
+  const { theme, setTheme } =
+    useCardIQTheme();
+
+  const {
+    activeProfile,
+    loadingProfiles,
+  } = useCardIQProfile();
 
   useEffect(() => {
     setMounted(true);
-
-    const loadProfileName = async () => {
-      const supabase = createClient();
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        return;
-      }
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("name")
-        .eq("user_id", user.id)
-        .order("is_default", {
-          ascending: false,
-        })
-        .order("created_at", {
-          ascending: true,
-        })
-        .limit(1)
-        .maybeSingle();
-
-      if (profile?.name) {
-        setProfileName(profile.name);
-      } else if (
-        user.user_metadata?.full_name
-      ) {
-        setProfileName(
-          user.user_metadata.full_name
-        );
-      }
-    };
-
-    loadProfileName();
   }, []);
 
   const handleLogout = async () => {
@@ -86,13 +62,17 @@ export default function CardIQHeader() {
     },
   ];
 
+  const displayedProfileName =
+    loadingProfiles
+      ? "Profile"
+      : activeProfile?.name ?? "Profile";
+
   return (
     <nav className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 lg:px-8">
 
         {/* Logo + Navigation */}
         <div className="flex items-center gap-10">
-
           <Link
             href="/dashboard"
             className="text-xl font-bold tracking-tight"
@@ -101,7 +81,6 @@ export default function CardIQHeader() {
           </Link>
 
           <div className="hidden items-center gap-7 text-sm font-medium text-slate-500 dark:text-slate-400 md:flex">
-
             <Link
               href="/dashboard"
               className="transition hover:text-slate-900 dark:hover:text-white"
@@ -129,14 +108,12 @@ export default function CardIQHeader() {
             >
               Discover
             </Link>
-
           </div>
         </div>
 
         {/* Actions */}
         <div className="flex items-center gap-3">
 
-          {/* Add Card */}
           <Link
             href="/cards/add"
             className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
@@ -146,7 +123,6 @@ export default function CardIQHeader() {
 
           {/* Profile Menu */}
           <div className="relative">
-
             <button
               type="button"
               onClick={() =>
@@ -157,7 +133,7 @@ export default function CardIQHeader() {
               className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
             >
               <span className="max-w-36 truncate">
-                {profileName}
+                {displayedProfileName}
               </span>
 
               <span
@@ -240,7 +216,6 @@ export default function CardIQHeader() {
 
                 <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
 
-                {/* Log out */}
                 <button
                   type="button"
                   onClick={handleLogout}
@@ -251,10 +226,8 @@ export default function CardIQHeader() {
                     ? "Logging out..."
                     : "Log out"}
                 </button>
-
               </div>
             )}
-
           </div>
         </div>
       </div>
