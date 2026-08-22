@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import CardIQHeader from "@/components/CardIQHeader";
+import { useCardIQProfile } from "@/components/ProfileProvider";
 
 type Card = {
   id: string;
@@ -40,13 +41,18 @@ const quickActions = [
 export default function Home() {
   const router = useRouter();
 
+  const {
+    activeProfile,
+    loadingProfiles,
+  } = useCardIQProfile();
+
   const [cards, setCards] = useState<Card[]>([]);
-  const [profileId, setProfileId] = useState("");
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [loadingCards, setLoadingCards] = useState(true);
   const [cardError, setCardError] = useState("");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [deletingCardId, setDeletingCardId] = useState<string | null>(null);
+  const [deletingCardId, setDeletingCardId] =
+    useState<string | null>(null);
   const [deleteError, setDeleteError] = useState("");
 
   const handleDeleteCard = async (cardId: string) => {
@@ -72,8 +78,10 @@ export default function Home() {
       return;
     }
 
-    if (!profileId) {
-      setDeleteError("Your current profile could not be identified.");
+    if (!activeProfile?.id) {
+      setDeleteError(
+        "Your current profile could not be identified."
+      );
       setDeletingCardId(null);
       return;
     }
@@ -83,7 +91,7 @@ export default function Home() {
       .delete()
       .eq("id", cardId)
       .eq("user_id", user.id)
-      .eq("profile_id", profileId);
+      .eq("profile_id", activeProfile.id);
 
     if (error) {
       console.error(error);
@@ -114,55 +122,36 @@ export default function Home() {
       }
 
       setCheckingAuth(false);
+    };
 
-      /*
-       * Current profile
-       *
-       * We only need the profile ID here.
-       * Avoid ordering by additional columns so this remains
-       * compatible with the current profile schema.
-       */
-      const {
-        data: profile,
-        error: profileError,
-      } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("user_id", user.id)
-        .limit(1)
-        .maybeSingle();
+    loadDashboard();
+  }, []);
 
-      if (profileError) {
-        console.error("Profile load error:", profileError);
+  useEffect(() => {
+    const loadCards = async () => {
+      if (loadingProfiles) {
+        return;
+      }
 
-        setCardError(
-          profileError.message ||
-            "Unable to load your current profile."
-        );
-
+      if (!activeProfile?.id) {
+        setCards([]);
+        setCardError("No active profile is available.");
         setLoadingCards(false);
         return;
       }
 
-      if (!profile) {
-        setCardError(
-          "No profile is available for your account."
-        );
-        setLoadingCards(false);
-        return;
-      }
+      setLoadingCards(true);
+      setCardError("");
+      setDeleteError("");
 
-      setProfileId(profile.id);
+      const supabase = createClient();
 
-      /*
-       * Cards belonging to the current profile
-       */
       const { data, error } = await supabase
         .from("cards")
         .select(
           "id, name, bank, network, variant, profile_id"
         )
-        .eq("profile_id", profile.id)
+        .eq("profile_id", activeProfile.id)
         .order("created_at", {
           ascending: false,
         });
@@ -170,11 +159,10 @@ export default function Home() {
       if (error) {
         console.error("Cards load error:", error);
 
+        setCards([]);
         setCardError(
-          error.message ||
-            "Unable to load your cards."
+          error.message || "Unable to load your cards."
         );
-
         setLoadingCards(false);
         return;
       }
@@ -183,10 +171,10 @@ export default function Home() {
       setLoadingCards(false);
     };
 
-    loadDashboard();
-  }, []);
+    loadCards();
+  }, [activeProfile?.id, loadingProfiles]);
 
-  if (checkingAuth) {
+  if (checkingAuth || loadingProfiles) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[var(--background)] text-[var(--foreground)]">
         <p className="text-sm text-[var(--muted)]">
@@ -204,7 +192,9 @@ export default function Home() {
         {/* Welcome */}
         <section className="mb-8">
           <p className="mb-2 text-sm font-medium text-[var(--muted)]">
-            Your credit card companion
+            {activeProfile?.name
+              ? `${activeProfile.name} profile`
+              : "Your credit card companion"}
           </p>
 
           <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
@@ -306,14 +296,18 @@ export default function Home() {
                 </h2>
 
                 <p className="mt-1 text-sm text-[var(--muted)]">
-                  Your card portfolio
+                  {activeProfile?.name
+                    ? `Cards in ${activeProfile.name}`
+                    : "Your card portfolio"}
                 </p>
               </div>
 
               <span className="text-sm font-semibold text-[var(--muted)]">
                 {cards.length > 0
-                  ? `${cards.length} card${cards.length === 1 ? "" : "s"}`
-                  : "View portfolio"}
+                  ? `${cards.length} card${
+                      cards.length === 1 ? "" : "s"
+                    }`
+                  : ""}
               </span>
             </div>
 
@@ -332,7 +326,7 @@ export default function Home() {
             ) : cards.length === 0 ? (
               <div className="rounded-xl border border-dashed border-[var(--border)] p-8 text-center">
                 <p className="text-sm font-medium">
-                  You haven&apos;t added any cards yet.
+                  You haven&apos;t added any cards to this profile yet.
                 </p>
 
                 <p className="mt-2 text-xs text-[var(--muted)]">
