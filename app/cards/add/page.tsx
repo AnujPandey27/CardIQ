@@ -12,6 +12,7 @@ import {
 } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import CardIQHeader from "@/components/CardIQHeader";
+import { useCardIQProfile } from "@/components/ProfileProvider";
 
 type VariantOption = {
   name: string;
@@ -1010,10 +1011,10 @@ function AddCardForm() {
   const editCardId = searchParams.get("edit");
   const isEditMode = Boolean(editCardId);
 
-  const [profileId, setProfileId] = useState("");
-  const [profileName, setProfileName] = useState("");
-  const [countryCode, setCountryCode] = useState("");
-  const [currencyCode, setCurrencyCode] = useState("");
+  const {
+    activeProfile,
+    loadingProfiles,
+  } = useCardIQProfile();
 
   const [bank, setBank] = useState("");
   const [manualBank, setManualBank] = useState("");
@@ -1026,7 +1027,7 @@ function AddCardForm() {
 
   const [network, setNetwork] = useState("");
 
-  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [loadingCard, setLoadingCard] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -1059,14 +1060,35 @@ function AddCardForm() {
   const isManualCard = cardName === MANUAL_VALUE;
   const isManualVariant = variant === MANUAL_VALUE;
 
-  const availableNetworks = selectedVariant?.networks ?? [];
+  const availableNetworks =
+    selectedVariant?.networks ?? [];
 
   const hasSingleKnownNetwork =
     !isManualVariant &&
     availableNetworks.length === 1;
 
   useEffect(() => {
-    const loadPage = async () => {
+    const loadCard = async () => {
+      if (loadingProfiles) {
+        return;
+      }
+
+      setError("");
+
+      if (!activeProfile?.id) {
+        setError(
+          "No active profile is available."
+        );
+        setLoadingCard(false);
+        return;
+      }
+
+      // Add mode
+      if (!editCardId) {
+        setLoadingCard(false);
+        return;
+      }
+
       const supabase = createClient();
 
       const {
@@ -1078,43 +1100,6 @@ function AddCardForm() {
         return;
       }
 
-      const { data: profile, error: profileError } =
-        await supabase
-          .from("profiles")
-          .select(
-            "id, name, country_code, currency_code"
-          )
-          .eq("user_id", user.id)
-          .order("is_default", {
-            ascending: false,
-          })
-          .order("created_at", {
-            ascending: true,
-          })
-          .limit(1)
-          .maybeSingle();
-
-      if (profileError || !profile) {
-        console.error(profileError);
-
-        setError(
-          "Unable to load your current profile."
-        );
-
-        setLoadingProfile(false);
-        return;
-      }
-
-      setProfileId(profile.id);
-      setProfileName(profile.name);
-      setCountryCode(profile.country_code);
-      setCurrencyCode(profile.currency_code);
-
-      if (!editCardId) {
-        setLoadingProfile(false);
-        return;
-      }
-
       const { data: card, error: cardError } =
         await supabase
           .from("cards")
@@ -1123,7 +1108,7 @@ function AddCardForm() {
           )
           .eq("id", editCardId)
           .eq("user_id", user.id)
-          .eq("profile_id", profile.id)
+          .eq("profile_id", activeProfile.id)
           .maybeSingle();
 
       if (cardError || !card) {
@@ -1133,7 +1118,7 @@ function AddCardForm() {
           "Unable to load the card you are trying to edit."
         );
 
-        setLoadingProfile(false);
+        setLoadingCard(false);
         return;
       }
 
@@ -1153,15 +1138,16 @@ function AddCardForm() {
         setVariant(MANUAL_VALUE);
         setManualVariant(card.variant ?? "");
 
-        setLoadingProfile(false);
+        setLoadingCard(false);
         return;
       }
 
       setBank(card.bank);
 
-      const catalogueCard = catalogueBank.cards.find(
-        (item) => item.name === card.name
-      );
+      const catalogueCard =
+        catalogueBank.cards.find(
+          (item) => item.name === card.name
+        );
 
       if (!catalogueCard) {
         setCardName(MANUAL_VALUE);
@@ -1170,7 +1156,7 @@ function AddCardForm() {
         setVariant(MANUAL_VALUE);
         setManualVariant(card.variant ?? "");
 
-        setLoadingProfile(false);
+        setLoadingCard(false);
         return;
       }
 
@@ -1188,11 +1174,16 @@ function AddCardForm() {
         setVariant(catalogueVariant.name);
       }
 
-      setLoadingProfile(false);
+      setLoadingCard(false);
     };
 
-    loadPage();
-  }, [editCardId, router]);
+    loadCard();
+  }, [
+    activeProfile?.id,
+    editCardId,
+    loadingProfiles,
+    router,
+  ]);
 
   const handleBankChange = (value: string) => {
     setBank(value);
@@ -1243,6 +1234,13 @@ function AddCardForm() {
     event.preventDefault();
     setError("");
 
+    if (!activeProfile?.id) {
+      setError(
+        "No active profile is available. Please select a profile first."
+      );
+      return;
+    }
+
     const finalBank = isManualBank
       ? manualBank.trim()
       : bank.trim();
@@ -1258,13 +1256,6 @@ function AddCardForm() {
     const finalNetwork = hasSingleKnownNetwork
       ? availableNetworks[0]
       : network.trim();
-
-    if (!profileId) {
-      setError(
-        "Your profile could not be identified. Please try again."
-      );
-      return;
-    }
 
     if (!finalBank) {
       setError(
@@ -1320,7 +1311,10 @@ function AddCardForm() {
             })
             .eq("id", editCardId)
             .eq("user_id", user.id)
-            .eq("profile_id", profileId);
+            .eq(
+              "profile_id",
+              activeProfile.id
+            );
 
         if (updateError) {
           throw updateError;
@@ -1331,7 +1325,7 @@ function AddCardForm() {
             .from("cards")
             .insert({
               user_id: user.id,
-              profile_id: profileId,
+              profile_id: activeProfile.id,
               name: finalCardName,
               bank: finalBank,
               network: finalNetwork,
@@ -1360,12 +1354,42 @@ function AddCardForm() {
     }
   };
 
-  if (loadingProfile) {
+  if (loadingProfiles || loadingCard) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[var(--background)] text-[var(--foreground)]">
         <p className="text-sm text-[var(--muted)]">
-          Loading your profile...
+          Loading CardIQ...
         </p>
+      </main>
+    );
+  }
+
+  if (!activeProfile) {
+    return (
+      <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
+        <CardIQHeader />
+
+        <div className="mx-auto max-w-3xl px-5 py-10 lg:px-8 lg:py-12">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-8 text-center shadow-sm">
+            <h1 className="text-xl font-semibold">
+              No active profile
+            </h1>
+
+            <p className="mt-2 text-sm text-[var(--muted)]">
+              Select a profile before adding or editing a card.
+            </p>
+
+            <button
+              type="button"
+              onClick={() =>
+                router.push("/profiles")
+              }
+              className="mt-5 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
+            >
+              Switch Profile
+            </button>
+          </div>
+        </div>
       </main>
     );
   }
@@ -1415,11 +1439,12 @@ function AddCardForm() {
           <div className="mt-2 flex items-center justify-between gap-4">
             <div>
               <p className="font-semibold">
-                {profileName}
+                {activeProfile.name}
               </p>
 
               <p className="mt-1 text-sm text-[var(--muted)]">
-                {countryCode} · {currencyCode}
+                {activeProfile.country_code} ·{" "}
+                {activeProfile.currency_code}
               </p>
             </div>
 
