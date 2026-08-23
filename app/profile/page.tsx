@@ -4,9 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import CardIQHeader from "@/components/CardIQHeader";
-import {
-  useCardIQProfile,
-} from "@/components/ProfileProvider";
+import { useCardIQProfile } from "@/components/ProfileProvider";
 
 type DetectedRegion = {
   countryCode: string;
@@ -23,11 +21,6 @@ function detectRegion(): DetectedRegion {
       ? navigator.language
       : "";
 
-  /*
-   * Primary detection uses the browser timezone.
-   * Locale is used as a fallback for regions where timezone
-   * alone is not sufficient.
-   */
   const timezoneMap: Record<
     string,
     DetectedRegion
@@ -169,14 +162,6 @@ function detectRegion(): DetectedRegion {
     return timezoneMap[timezone];
   }
 
-  /*
-   * Locale fallback.
-   *
-   * Examples:
-   * en-IN → IN
-   * en-SG → SG
-   * en-GB → GB
-   */
   const localeCountry = language.includes("-")
     ? language.split("-")[1]?.toUpperCase()
     : "";
@@ -269,10 +254,19 @@ export default function ProfilesPage() {
   const [creatingProfile, setCreatingProfile] =
     useState(false);
 
+  const [archivingProfileId, setArchivingProfileId] =
+    useState<string | null>(null);
+
   const [createError, setCreateError] =
     useState("");
 
   const [createMessage, setCreateMessage] =
+    useState("");
+
+  const [archiveError, setArchiveError] =
+    useState("");
+
+  const [archiveMessage, setArchiveMessage] =
     useState("");
 
   const detectedRegion = useMemo(
@@ -298,6 +292,8 @@ export default function ProfilesPage() {
     setCreatingProfile(true);
     setCreateError("");
     setCreateMessage("");
+    setArchiveError("");
+    setArchiveMessage("");
 
     const supabase = createClient();
 
@@ -311,48 +307,97 @@ export default function ProfilesPage() {
     }
 
     /*
-     * Prevent multiple profiles for the same country.
+     * First check all profiles, including archived profiles.
+     * The database has a unique constraint on:
+     *
+     * user_id + country_code
+     *
+     * so an archived profile for this country also prevents
+     * creation of a second profile for the same country.
      */
-    const existingProfile = profiles.find(
-      (profile) =>
-        profile.country_code ===
+    const {
+      data: existingProfile,
+      error: existingProfileError,
+    } = await supabase
+      .from("profiles")
+      .select(
+        "id, name, country_code, currency_code, is_archived"
+      )
+      .eq("user_id", user.id)
+      .eq(
+        "country_code",
         detectedRegion.countryCode
-    );
+      )
+      .maybeSingle();
 
-    if (existingProfile) {
-      switchProfile(existingProfile.id);
+    if (existingProfileError) {
+      console.error(existingProfileError);
 
-      setCreateMessage(
-        `${existingProfile.name} is already available. It has been made your active profile.`
+      setCreateError(
+        existingProfileError.message ||
+          "Unable to check whether this regional profile already exists."
       );
 
       setCreatingProfile(false);
       return;
     }
 
-    const { data: newProfile, error } =
-      await supabase
-        .from("profiles")
-        .insert({
-          user_id: user.id,
-          name: detectedRegion.suggestedName,
-          country_code:
-            detectedRegion.countryCode,
-          currency_code:
-            detectedRegion.currencyCode,
-          is_default: false,
-        })
-        .select(
-          "id, name, country_code, currency_code, is_default, created_at"
-        )
-        .single();
+    if (existingProfile) {
+      if (existingProfile.is_archived) {
+        setCreateError(
+          `${existingProfile.name} is archived. Restore it from the profile management flow before using this region again.`
+        );
+      } else {
+        switchProfile(existingProfile.id);
+
+        setCreateMessage(
+          `${existingProfile.name} is already available. It has been made your active profile.`
+        );
+      }
+
+      setCreatingProfile(false);
+      return;
+    }
+
+    const {
+      data: newProfile,
+      error,
+    } = await supabase
+      .from("profiles")
+      .insert({
+        user_id: user.id,
+        name: detectedRegion.suggestedName,
+        country_code:
+          detectedRegion.countryCode,
+        currency_code:
+          detectedRegion.currencyCode,
+        is_default: false,
+        is_archived: false,
+      })
+      .select(
+        "id, name, country_code, currency_code, is_default, is_archived, created_at"
+      )
+      .single();
 
     if (error) {
       console.error(error);
-      setCreateError(
-        error.message ||
-          "Unable to create your new regional profile."
-      );
+
+      if (
+        error.code === "23505" ||
+        error.message
+          ?.toLowerCase()
+          .includes("profiles_user_country_unique")
+      ) {
+        setCreateError(
+          "A profile for this country already exists on your account."
+        );
+      } else {
+        setCreateError(
+          error.message ||
+            "Unable to create your new regional profile."
+        );
+      }
+
       setCreatingProfile(false);
       return;
     }
@@ -370,6 +415,82 @@ export default function ProfilesPage() {
     setTimeout(() => {
       router.push("/dashboard");
     }, 700);
+  };
+
+  const handleArchiveProfile = async (
+    profileId: string
+  ) => {
+    if (profileId === activeProfile?.id) {
+      setArchiveError(
+        "You cannot archive the profile you are currently using."
+      );
+      return;
+    }
+
+    const profile = profiles.find(
+      (item) => item.id === profileId
+    );
+
+    if (!profile) {
+      setArchiveError(
+        "That profile could not be found."
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Archive the "${profile.name}" profile?\n\nYour cards and historical data will be kept. The profile will simply be removed from your active profile list.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setArchivingProfileId(profileId);
+    setArchiveError("");
+    setArchiveMessage("");
+    setCreateError("");
+    setCreateMessage("");
+
+    const supabase = createClient();
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        is_archived: true,
+      })
+      .eq("id", profileId)
+      .eq("user_id", user.id)
+      .eq("is_archived", false);
+
+    if (error) {
+      console.error(error);
+
+      setArchiveError(
+        error.message ||
+          "Unable to archive this profile."
+      );
+
+      setArchivingProfileId(null);
+      return;
+    }
+
+    await refreshProfiles();
+
+    setArchiveMessage(
+      `${profile.name} has been archived.`
+    );
+
+    setArchivingProfileId(null);
   };
 
   if (loadingProfiles) {
@@ -410,40 +531,79 @@ export default function ProfilesPage() {
               profile.id === activeProfile?.id;
 
             return (
-              <button
+              <div
                 key={profile.id}
-                type="button"
-                onClick={() =>
-                  handleSwitchProfile(profile.id)
-                }
-                className={`w-full rounded-2xl border bg-[var(--card)] p-5 text-left shadow-sm transition ${
+                className={`rounded-2xl border bg-[var(--card)] p-5 shadow-sm transition ${
                   isActive
                     ? "border-slate-900 dark:border-white"
-                    : "border-[var(--border)] hover:brightness-95"
+                    : "border-[var(--border)]"
                 }`}
               >
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <h2 className="font-semibold">
-                      {profile.name}
-                    </h2>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleSwitchProfile(profile.id)
+                    }
+                    className="min-w-0 flex-1 text-left"
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="min-w-0">
+                        <h2 className="truncate font-semibold">
+                          {profile.name}
+                        </h2>
 
-                    <p className="mt-1 text-sm text-[var(--muted)]">
-                      {profile.country_code} ·{" "}
-                      {profile.currency_code}
-                    </p>
-                  </div>
+                        <p className="mt-1 text-sm text-[var(--muted)]">
+                          {profile.country_code} ·{" "}
+                          {profile.currency_code}
+                        </p>
+                      </div>
 
-                  {isActive && (
-                    <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white dark:bg-white dark:text-slate-950">
-                      Active
-                    </span>
+                      {isActive && (
+                        <span className="shrink-0 rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white dark:bg-white dark:text-slate-950">
+                          Active
+                        </span>
+                      )}
+                    </div>
+                  </button>
+
+                  {!isActive && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleArchiveProfile(
+                          profile.id
+                        )
+                      }
+                      disabled={
+                        archivingProfileId ===
+                        profile.id
+                      }
+                      className="shrink-0 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/30"
+                    >
+                      {archivingProfileId ===
+                      profile.id
+                        ? "Archiving..."
+                        : "Archive"}
+                    </button>
                   )}
                 </div>
-              </button>
+              </div>
             );
           })}
         </section>
+
+        {archiveError && (
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+            {archiveError}
+          </div>
+        )}
+
+        {archiveMessage && (
+          <div className="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700 dark:border-green-900 dark:bg-green-950/30 dark:text-green-300">
+            {archiveMessage}
+          </div>
+        )}
 
         {/* Add Profile */}
         <section className="mt-8 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm sm:p-8">
@@ -505,15 +665,16 @@ export default function ProfilesPage() {
           </button>
         </section>
 
-        {/* Future detection note */}
+        {/* Information */}
         <div className="mt-6 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card)] p-5">
           <p className="text-sm leading-6 text-[var(--muted)]">
-            Country selection is intentionally unavailable. CardIQ will
-            use regional detection to keep country-specific card catalogues,
+            Country selection is intentionally unavailable. CardIQ uses
+            regional detection to keep country-specific card catalogues,
             rewards and currencies separate between profiles.
           </p>
         </div>
 
+        {/* Footer */}
         <footer className="mt-12 border-t border-[var(--border)] pt-6 text-xs text-[var(--muted)]">
           <div className="flex flex-col justify-between gap-2 sm:flex-row">
             <span>CardIQ</span>
