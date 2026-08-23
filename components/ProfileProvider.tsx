@@ -14,6 +14,7 @@ export type Profile = {
   country_code: string;
   currency_code: string;
   is_default: boolean | null;
+  is_archived: boolean;
   created_at: string;
 };
 
@@ -72,9 +73,10 @@ export default function ProfileProvider({
     const { data, error } = await supabase
       .from("profiles")
       .select(
-        "id, name, country_code, currency_code, is_default, created_at"
+        "id, name, country_code, currency_code, is_default, is_archived, created_at"
       )
       .eq("user_id", user.id)
+      .eq("is_archived", false)
       .order("is_default", {
         ascending: false,
         nullsFirst: false,
@@ -97,6 +99,13 @@ export default function ProfileProvider({
 
     if (loadedProfiles.length === 0) {
       setActiveProfile(null);
+
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(
+          ACTIVE_PROFILE_KEY
+        );
+      }
+
       setLoadingProfiles(false);
       return;
     }
@@ -143,10 +152,11 @@ export default function ProfileProvider({
 
   const switchProfile = (profileId: string) => {
     const selectedProfile = profiles.find(
-      (profile) => profile.id === profileId
+      (profile) =>
+        profile.id === profileId
     );
 
-    if (!selectedProfile) {
+    if (!selectedProfile || selectedProfile.is_archived) {
       return;
     }
 
