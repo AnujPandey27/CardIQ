@@ -37,127 +37,106 @@ function detectRegion(): DetectedRegion {
       currencyCode: "INR",
       suggestedName: "India",
     },
-
     "Asia/Singapore": {
       countryCode: "SG",
       currencyCode: "SGD",
       suggestedName: "Singapore",
     },
-
     "Asia/Dubai": {
       countryCode: "AE",
       currencyCode: "AED",
       suggestedName: "UAE",
     },
-
     "Asia/Muscat": {
       countryCode: "OM",
       currencyCode: "OMR",
       suggestedName: "Oman",
     },
-
     "Asia/Riyadh": {
       countryCode: "SA",
       currencyCode: "SAR",
       suggestedName: "Saudi Arabia",
     },
-
     "Asia/Qatar": {
       countryCode: "QA",
       currencyCode: "QAR",
       suggestedName: "Qatar",
     },
-
     "Europe/London": {
       countryCode: "GB",
       currencyCode: "GBP",
       suggestedName: "United Kingdom",
     },
-
     "Europe/Dublin": {
       countryCode: "IE",
       currencyCode: "EUR",
       suggestedName: "Ireland",
     },
-
     "Europe/Amsterdam": {
       countryCode: "NL",
       currencyCode: "EUR",
       suggestedName: "Netherlands",
     },
-
     "Europe/Stockholm": {
       countryCode: "SE",
       currencyCode: "SEK",
       suggestedName: "Sweden",
     },
-
     "Europe/Paris": {
       countryCode: "FR",
       currencyCode: "EUR",
       suggestedName: "France",
     },
-
     "Europe/Berlin": {
       countryCode: "DE",
       currencyCode: "EUR",
       suggestedName: "Germany",
     },
-
     "Europe/Zurich": {
       countryCode: "CH",
       currencyCode: "CHF",
       suggestedName: "Switzerland",
     },
-
     "America/New_York": {
       countryCode: "US",
       currencyCode: "USD",
       suggestedName: "United States",
     },
-
     "America/Los_Angeles": {
       countryCode: "US",
       currencyCode: "USD",
       suggestedName: "United States",
     },
-
     "America/Chicago": {
       countryCode: "US",
       currencyCode: "USD",
       suggestedName: "United States",
     },
-
     "America/Denver": {
       countryCode: "US",
       currencyCode: "USD",
       suggestedName: "United States",
     },
-
     "Australia/Sydney": {
       countryCode: "AU",
       currencyCode: "AUD",
       suggestedName: "Australia",
     },
-
     "Australia/Melbourne": {
       countryCode: "AU",
       currencyCode: "AUD",
       suggestedName: "Australia",
     },
-
     "Asia/Tokyo": {
       countryCode: "JP",
       currencyCode: "JPY",
       suggestedName: "Japan",
     },
-
     "Asia/Hong_Kong": {
       countryCode: "HK",
       currencyCode: "HKD",
       suggestedName: "Hong Kong",
     },
-
     "Asia/Seoul": {
       countryCode: "KR",
       currencyCode: "KRW",
@@ -179,55 +158,46 @@ function detectRegion(): DetectedRegion {
       currencyCode: "INR",
       suggestedName: "India",
     },
-
     SG: {
       countryCode: "SG",
       currencyCode: "SGD",
       suggestedName: "Singapore",
     },
-
     AE: {
       countryCode: "AE",
       currencyCode: "AED",
       suggestedName: "UAE",
     },
-
     GB: {
       countryCode: "GB",
       currencyCode: "GBP",
       suggestedName: "United Kingdom",
     },
-
     IE: {
       countryCode: "IE",
       currencyCode: "EUR",
       suggestedName: "Ireland",
     },
-
     US: {
       countryCode: "US",
       currencyCode: "USD",
       suggestedName: "United States",
     },
-
     AU: {
       countryCode: "AU",
       currencyCode: "AUD",
       suggestedName: "Australia",
     },
-
     JP: {
       countryCode: "JP",
       currencyCode: "JPY",
       suggestedName: "Japan",
     },
-
     HK: {
       countryCode: "HK",
       currencyCode: "HKD",
       suggestedName: "Hong Kong",
     },
-
     KR: {
       countryCode: "KR",
       currencyCode: "KRW",
@@ -270,90 +240,93 @@ export default function ProfilesPage() {
   const [restoringProfileId, setRestoringProfileId] =
     useState<string | null>(null);
 
-  const [createError, setCreateError] =
-    useState("");
+  const [deletingProfileId, setDeletingProfileId] =
+    useState<string | null>(null);
 
-  const [createMessage, setCreateMessage] =
-    useState("");
+  const [createError, setCreateError] = useState("");
+  const [createMessage, setCreateMessage] = useState("");
 
-  const [archiveError, setArchiveError] =
-    useState("");
+  const [archiveError, setArchiveError] = useState("");
+  const [archiveMessage, setArchiveMessage] = useState("");
 
-  const [archiveMessage, setArchiveMessage] =
-    useState("");
+  const [restoreError, setRestoreError] = useState("");
+  const [restoreMessage, setRestoreMessage] = useState("");
 
-  const [restoreError, setRestoreError] =
-    useState("");
-
-  const [restoreMessage, setRestoreMessage] =
-    useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [deleteMessage, setDeleteMessage] = useState("");
 
   const detectedRegion = useMemo(
     () => detectRegion(),
     []
   );
 
-  const profileAlreadyExists =
-    profiles.some(
-      (profile) =>
-        profile.country_code ===
-        detectedRegion.countryCode
-    );
+  const profileAlreadyExists = profiles.some(
+    (profile) =>
+      profile.country_code ===
+      detectedRegion.countryCode
+  );
 
-  const loadArchivedProfiles =
-    async () => {
-      const supabase = createClient();
+  const loadArchivedProfiles = async () => {
+    const supabase = createClient();
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-      if (!user) {
-        router.push("/login");
-        return;
-      }
+    if (!user) {
+      router.push("/login");
+      return;
+    }
 
-      setLoadingArchived(true);
+    setLoadingArchived(true);
 
-      const {
-        data,
-        error,
-      } = await supabase
-        .from("profiles")
-        .select(
-          "id, name, country_code, currency_code, is_default, is_archived, created_at"
-        )
-        .eq("user_id", user.id)
-        .eq("is_archived", true)
-        .order("created_at", {
-          ascending: true,
-        });
+    const { data, error } = await supabase
+      .from("profiles")
+      .select(
+        "id, name, country_code, currency_code, is_default, is_archived, created_at"
+      )
+      .eq("user_id", user.id)
+      .eq("is_archived", true)
+      .order("created_at", {
+        ascending: true,
+      });
 
-      if (error) {
-        console.error(
-          "Archived profiles load error:",
-          error
-        );
+    if (error) {
+      console.error(
+        "Archived profiles load error:",
+        error
+      );
 
-        setRestoreError(
-          error.message ||
-            "Unable to load archived profiles."
-        );
+      setRestoreError(
+        error.message ||
+          "Unable to load archived profiles."
+      );
 
-        setArchivedProfiles([]);
-        setLoadingArchived(false);
-        return;
-      }
-
-      setArchivedProfiles(data ?? []);
+      setArchivedProfiles([]);
       setLoadingArchived(false);
-    };
+      return;
+    }
+
+    setArchivedProfiles(data ?? []);
+    setLoadingArchived(false);
+  };
 
   useEffect(() => {
     if (!loadingProfiles) {
       loadArchivedProfiles();
     }
   }, [loadingProfiles]);
+
+  const clearMessages = () => {
+    setCreateError("");
+    setCreateMessage("");
+    setArchiveError("");
+    setArchiveMessage("");
+    setRestoreError("");
+    setRestoreMessage("");
+    setDeleteError("");
+    setDeleteMessage("");
+  };
 
   const handleSwitchProfile = (
     profileId: string
@@ -362,326 +335,350 @@ export default function ProfilesPage() {
     router.push("/dashboard");
   };
 
-  const handleCreateProfile =
-    async () => {
-      setCreatingProfile(true);
+  const handleCreateProfile = async () => {
+    setCreatingProfile(true);
+    clearMessages();
 
-      setCreateError("");
-      setCreateMessage("");
-      setArchiveError("");
-      setArchiveMessage("");
-      setRestoreError("");
-      setRestoreMessage("");
+    const supabase = createClient();
 
-      const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+    if (!user) {
+      router.push("/login");
+      return;
+    }
 
-      if (!user) {
-        router.push("/login");
-        return;
-      }
+    const {
+      data: existingProfile,
+      error: existingProfileError,
+    } = await supabase
+      .from("profiles")
+      .select(
+        "id, name, country_code, currency_code, is_archived"
+      )
+      .eq("user_id", user.id)
+      .eq(
+        "country_code",
+        detectedRegion.countryCode
+      )
+      .maybeSingle();
 
-      /*
-       * Check ALL profiles, including archived profiles.
-       * The database also enforces this with the unique
-       * (user_id, country_code) constraint.
-       */
-      const {
-        data: existingProfile,
-        error: existingProfileError,
-      } = await supabase
-        .from("profiles")
-        .select(
-          "id, name, country_code, currency_code, is_archived"
-        )
-        .eq("user_id", user.id)
-        .eq(
-          "country_code",
-          detectedRegion.countryCode
-        )
-        .maybeSingle();
+    if (existingProfileError) {
+      console.error(existingProfileError);
 
-      if (existingProfileError) {
-        console.error(
-          existingProfileError
-        );
-
-        setCreateError(
-          existingProfileError.message ||
-            "Unable to check whether this profile already exists."
-        );
-
-        setCreatingProfile(false);
-        return;
-      }
-
-      if (existingProfile) {
-        if (existingProfile.is_archived) {
-          setCreateError(
-            `A ${existingProfile.name} profile already exists but is archived. Restore it instead of creating another profile for the same country.`
-          );
-        } else {
-          switchProfile(existingProfile.id);
-
-          setCreateMessage(
-            `${existingProfile.name} is already available and has been made active.`
-          );
-        }
-
-        setCreatingProfile(false);
-        return;
-      }
-
-      const {
-        data: newProfile,
-        error,
-      } = await supabase
-        .from("profiles")
-        .insert({
-          user_id: user.id,
-          name: detectedRegion.suggestedName,
-          country_code:
-            detectedRegion.countryCode,
-          currency_code:
-            detectedRegion.currencyCode,
-          is_default: false,
-          is_archived: false,
-        })
-        .select(
-          "id, name, country_code, currency_code, is_default, is_archived, created_at"
-        )
-        .single();
-
-      if (error) {
-        console.error(error);
-
-        if (
-          error.code === "23505" ||
-          error.message
-            ?.toLowerCase()
-            .includes(
-              "profiles_user_country_unique"
-            )
-        ) {
-          setCreateError(
-            "A profile for this country already exists on your account."
-          );
-        } else {
-          setCreateError(
-            error.message ||
-              "Unable to create your new regional profile."
-          );
-        }
-
-        setCreatingProfile(false);
-        return;
-      }
-
-      await refreshProfiles();
-      await loadArchivedProfiles();
-
-      switchProfile(newProfile.id);
-
-      setCreateMessage(
-        `${newProfile.name} profile created successfully.`
+      setCreateError(
+        existingProfileError.message ||
+          "Unable to check whether this profile already exists."
       );
 
       setCreatingProfile(false);
+      return;
+    }
 
-      setTimeout(() => {
-        router.push("/dashboard");
-      }, 700);
-    };
+    if (existingProfile) {
+      if (existingProfile.is_archived) {
+        setCreateError(
+          `A ${existingProfile.name} profile already exists but is archived. Restore it instead of creating another profile for the same country.`
+        );
+      } else {
+        switchProfile(existingProfile.id);
 
-  const handleArchiveProfile =
-    async (
-      profileId: string
-    ) => {
+        setCreateMessage(
+          `${existingProfile.name} is already available and has been made active.`
+        );
+      }
+
+      setCreatingProfile(false);
+      return;
+    }
+
+    const {
+      data: newProfile,
+      error,
+    } = await supabase
+      .from("profiles")
+      .insert({
+        user_id: user.id,
+        name: detectedRegion.suggestedName,
+        country_code:
+          detectedRegion.countryCode,
+        currency_code:
+          detectedRegion.currencyCode,
+        is_default: false,
+        is_archived: false,
+      })
+      .select(
+        "id, name, country_code, currency_code, is_default, is_archived, created_at"
+      )
+      .single();
+
+    if (error) {
+      console.error(error);
+
       if (
-        profileId ===
-        activeProfile?.id
+        error.code === "23505" ||
+        error.message
+          ?.toLowerCase()
+          .includes(
+            "profiles_user_country_unique"
+          )
       ) {
-        setArchiveError(
-          "You cannot archive the profile you are currently using."
+        setCreateError(
+          "A profile for this country already exists on your account."
         );
-        return;
-      }
-
-      const profile = profiles.find(
-        (item) => item.id === profileId
-      );
-
-      if (!profile) {
-        setArchiveError(
-          "That profile could not be found."
-        );
-        return;
-      }
-
-      const confirmed =
-        window.confirm(
-          `Archive the "${profile.name}" profile?\n\nYour cards and historical data will be kept. The profile will be removed from the active profile list and can be restored later.`
-        );
-
-      if (!confirmed) {
-        return;
-      }
-
-      setArchivingProfileId(profileId);
-
-      setArchiveError("");
-      setArchiveMessage("");
-      setCreateError("");
-      setCreateMessage("");
-      setRestoreError("");
-      setRestoreMessage("");
-
-      const supabase = createClient();
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        router.push("/login");
-        return;
-      }
-
-      const { error } =
-        await supabase
-          .from("profiles")
-          .update({
-            is_archived: true,
-          })
-          .eq("id", profileId)
-          .eq("user_id", user.id)
-          .eq("is_archived", false);
-
-      if (error) {
-        console.error(error);
-
-        setArchiveError(
+      } else {
+        setCreateError(
           error.message ||
-            "Unable to archive this profile."
+            "Unable to create your new regional profile."
         );
-
-        setArchivingProfileId(null);
-        return;
       }
 
-      await refreshProfiles();
-      await loadArchivedProfiles();
+      setCreatingProfile(false);
+      return;
+    }
 
-      setArchiveMessage(
-        `${profile.name} has been archived.`
+    await refreshProfiles();
+    await loadArchivedProfiles();
+
+    switchProfile(newProfile.id);
+
+    setCreateMessage(
+      `${newProfile.name} profile created successfully.`
+    );
+
+    setCreatingProfile(false);
+
+    setTimeout(() => {
+      router.push("/dashboard");
+    }, 700);
+  };
+
+  const handleArchiveProfile = async (
+    profileId: string
+  ) => {
+    if (profileId === activeProfile?.id) {
+      setArchiveError(
+        "You cannot archive the profile you are currently using."
+      );
+      return;
+    }
+
+    const profile = profiles.find(
+      (item) => item.id === profileId
+    );
+
+    if (!profile) {
+      setArchiveError(
+        "That profile could not be found."
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Archive the "${profile.name}" profile?\n\nYour cards and historical data will be kept. The profile will be removed from the active profile list and can be restored later.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setArchivingProfileId(profileId);
+    clearMessages();
+
+    const supabase = createClient();
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        is_archived: true,
+      })
+      .eq("id", profileId)
+      .eq("user_id", user.id)
+      .eq("is_archived", false);
+
+    if (error) {
+      console.error(error);
+
+      setArchiveError(
+        error.message ||
+          "Unable to archive this profile."
       );
 
       setArchivingProfileId(null);
-    };
+      return;
+    }
 
-  const handleRestoreProfile =
-    async (
-      profileId: string
-    ) => {
-      const profile =
-        archivedProfiles.find(
-          (item) =>
-            item.id === profileId
-        );
+    await refreshProfiles();
+    await loadArchivedProfiles();
 
-      if (!profile) {
-        setRestoreError(
-          "That archived profile could not be found."
-        );
-        return;
-      }
+    setArchiveMessage(
+      `${profile.name} has been archived.`
+    );
 
-      const confirmed =
-        window.confirm(
-          `Restore the "${profile.name}" profile?\n\nIt will become available again in Switch Profile.`
-        );
+    setArchivingProfileId(null);
+  };
 
-      if (!confirmed) {
-        return;
-      }
-
-      setRestoringProfileId(profileId);
-
-      setRestoreError("");
-      setRestoreMessage("");
-      setCreateError("");
-      setCreateMessage("");
-      setArchiveError("");
-      setArchiveMessage("");
-
-      const supabase = createClient();
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        router.push("/login");
-        return;
-      }
-
-      /*
-       * The unique country constraint guarantees that there
-       * cannot already be another profile for this country.
-       */
-      const {
-        data: restoredProfile,
-        error,
-      } = await supabase
-        .from("profiles")
-        .update({
-          is_archived: false,
-        })
-        .eq("id", profileId)
-        .eq("user_id", user.id)
-        .eq("is_archived", true)
-        .select(
-          "id, name, country_code, currency_code, is_default, is_archived, created_at"
-        )
-        .single();
-
-      if (error) {
-        console.error(error);
-
-        if (
-          error.code === "23505" ||
-          error.message
-            ?.toLowerCase()
-            .includes(
-              "profiles_user_country_unique"
-            )
-        ) {
-          setRestoreError(
-            "This country already has another profile on your account. The archived profile cannot be restored."
-          );
-        } else {
-          setRestoreError(
-            error.message ||
-              "Unable to restore this profile."
-          );
-        }
-
-        setRestoringProfileId(null);
-        return;
-      }
-
-      await refreshProfiles();
-      await loadArchivedProfiles();
-
-      setRestoreMessage(
-        `${restoredProfile.name} has been restored.`
+  const handleRestoreProfile = async (
+    profileId: string
+  ) => {
+    const profile =
+      archivedProfiles.find(
+        (item) => item.id === profileId
       );
 
+    if (!profile) {
+      setRestoreError(
+        "That archived profile could not be found."
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Restore the "${profile.name}" profile?\n\nIt will become available again in Switch Profile.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setRestoringProfileId(profileId);
+    clearMessages();
+
+    const supabase = createClient();
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+
+    const {
+      data: restoredProfile,
+      error,
+    } = await supabase
+      .from("profiles")
+      .update({
+        is_archived: false,
+      })
+      .eq("id", profileId)
+      .eq("user_id", user.id)
+      .eq("is_archived", true)
+      .select(
+        "id, name, country_code, currency_code, is_default, is_archived, created_at"
+      )
+      .single();
+
+    if (error) {
+      console.error(error);
+
+      if (
+        error.code === "23505" ||
+        error.message
+          ?.toLowerCase()
+          .includes(
+            "profiles_user_country_unique"
+          )
+      ) {
+        setRestoreError(
+          "This country already has another profile on your account. The archived profile cannot be restored."
+        );
+      } else {
+        setRestoreError(
+          error.message ||
+            "Unable to restore this profile."
+        );
+      }
+
       setRestoringProfileId(null);
-    };
+      return;
+    }
+
+    await refreshProfiles();
+    await loadArchivedProfiles();
+
+    setRestoreMessage(
+      `${restoredProfile.name} has been restored.`
+    );
+
+    setRestoringProfileId(null);
+  };
+
+  const handleDeleteProfile = async (
+    profile: ProfileRecord
+  ) => {
+    if (
+      profile.id === activeProfile?.id
+    ) {
+      setDeleteError(
+        "You cannot delete the profile you are currently using. Switch to another profile first."
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete the "${profile.name}" profile permanently?\n\nThis will permanently delete the profile and all cards belonging to it. This action cannot be undone.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingProfileId(profile.id);
+    clearMessages();
+
+    const supabase = createClient();
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+
+    const { error } = await supabase.rpc(
+      "delete_profile",
+      {
+        profile_uuid: profile.id,
+      }
+    );
+
+    if (error) {
+      console.error(error);
+
+      setDeleteError(
+        error.message ||
+          "Unable to permanently delete this profile."
+      );
+
+      setDeletingProfileId(null);
+      return;
+    }
+
+    await refreshProfiles();
+    await loadArchivedProfiles();
+
+    setDeleteMessage(
+      `${profile.name} has been permanently deleted.`
+    );
+
+    setDeletingProfileId(null);
+  };
 
   if (loadingProfiles) {
     return (
@@ -752,7 +749,7 @@ export default function ProfilesPage() {
                         : "border-[var(--border)]"
                     }`}
                   >
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-4">
                       <button
                         type="button"
                         onClick={() =>
@@ -760,7 +757,7 @@ export default function ProfilesPage() {
                             profile.id
                           )
                         }
-                        className="min-w-0 flex-1 text-left"
+                        className="min-w-0 text-left"
                       >
                         <div className="flex items-center justify-between gap-4">
                           <div className="min-w-0">
@@ -783,24 +780,45 @@ export default function ProfilesPage() {
                       </button>
 
                       {!isActive && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleArchiveProfile(
+                        <div className="flex flex-wrap gap-2 border-t border-[var(--border)] pt-4">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleArchiveProfile(
+                                profile.id
+                              )
+                            }
+                            disabled={
+                              archivingProfileId ===
                               profile.id
-                            )
-                          }
-                          disabled={
-                            archivingProfileId ===
+                            }
+                            className="rounded-xl border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/30"
+                          >
+                            {archivingProfileId ===
                             profile.id
-                          }
-                          className="shrink-0 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/30"
-                        >
-                          {archivingProfileId ===
-                          profile.id
-                            ? "Archiving..."
-                            : "Archive"}
-                        </button>
+                              ? "Archiving..."
+                              : "Archive"}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleDeleteProfile(
+                                profile
+                              )
+                            }
+                            disabled={
+                              deletingProfileId ===
+                              profile.id
+                            }
+                            className="rounded-xl border border-red-300 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-950/50"
+                          >
+                            {deletingProfileId ===
+                            profile.id
+                              ? "Deleting..."
+                              : "Delete permanently"}
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -831,7 +849,7 @@ export default function ProfilesPage() {
             </h2>
 
             <p className="mt-1 text-sm text-[var(--muted)]">
-              Restore an archived profile to make it available again.
+              Restore an archived profile or permanently delete it.
             </p>
           </div>
 
@@ -855,7 +873,7 @@ export default function ProfilesPage() {
                     key={profile.id}
                     className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm"
                   >
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-4">
                       <div className="min-w-0">
                         <h3 className="truncate font-semibold">
                           {profile.name}
@@ -867,24 +885,45 @@ export default function ProfilesPage() {
                         </p>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleRestoreProfile(
+                      <div className="flex flex-wrap gap-2 border-t border-[var(--border)] pt-4">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleRestoreProfile(
+                              profile.id
+                            )
+                          }
+                          disabled={
+                            restoringProfileId ===
                             profile.id
-                          )
-                        }
-                        disabled={
-                          restoringProfileId ===
+                          }
+                          className="rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-semibold transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-slate-800"
+                        >
+                          {restoringProfileId ===
                           profile.id
-                        }
-                        className="shrink-0 rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-semibold transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-slate-800"
-                      >
-                        {restoringProfileId ===
-                        profile.id
-                          ? "Restoring..."
-                          : "Restore"}
-                      </button>
+                            ? "Restoring..."
+                            : "Restore"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleDeleteProfile(
+                              profile
+                            )
+                          }
+                          disabled={
+                            deletingProfileId ===
+                            profile.id
+                          }
+                          className="rounded-xl border border-red-300 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-950/50"
+                        >
+                          {deletingProfileId ===
+                          profile.id
+                            ? "Deleting..."
+                            : "Delete permanently"}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )
@@ -905,6 +944,19 @@ export default function ProfilesPage() {
           </div>
         )}
 
+        {/* Delete Messages */}
+        {deleteError && (
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+            {deleteError}
+          </div>
+        )}
+
+        {deleteMessage && (
+          <div className="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700 dark:border-green-900 dark:bg-green-950/30 dark:text-green-300">
+            {deleteMessage}
+          </div>
+        )}
+
         {/* Add Profile */}
         <section className="mt-8 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm sm:p-8">
           <div className="mb-6">
@@ -917,9 +969,9 @@ export default function ProfilesPage() {
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-              CardIQ automatically determines the country and currency from
-              your current device region. You cannot manually select the
-              country.
+              CardIQ automatically determines the country and currency
+              from your current device region. You cannot manually select
+              the country.
             </p>
           </div>
 
@@ -973,7 +1025,6 @@ export default function ProfilesPage() {
           </p>
         </div>
 
-        {/* Footer */}
         <footer className="mt-12 border-t border-[var(--border)] pt-6 text-xs text-[var(--muted)]">
           <div className="flex flex-col justify-between gap-2 sm:flex-row">
             <span>CardIQ</span>
