@@ -138,14 +138,14 @@ export default function CardIQHeader() {
                 className="absolute right-0 mt-2 w-64 overflow-hidden rounded-2xl border border-slate-200 bg-white p-1.5 shadow-lg dark:border-slate-700 dark:bg-slate-900"
                 role="menu"
               >
-                {/* Profile */}
+                {/* Profile Settings */}
                 <Link
                   href="/profile"
                   onClick={() => setProfileMenuOpen(false)}
                   className="block rounded-xl px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
                   role="menuitem"
                 >
-                  Profile
+                  Profile settings
                 </Link>
 
                 {/* Switch Profile */}
@@ -165,7 +165,7 @@ export default function CardIQHeader() {
                   className="block rounded-xl px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
                   role="menuitem"
                 >
-                  Settings
+                  Account settings
                 </Link>
 
                 <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
