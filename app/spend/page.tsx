@@ -62,6 +62,9 @@ export default function SpendPage() {
   const [editingTransactionId, setEditingTransactionId] =
     useState<string | null>(null);
 
+  const [openMenuId, setOpenMenuId] =
+    useState<string | null>(null);
+
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -126,10 +129,7 @@ export default function SpendPage() {
               "id, name, bank, network, variant"
             )
             .eq("user_id", user.id)
-            .eq(
-              "profile_id",
-              activeProfile.id
-            )
+            .eq("profile_id", activeProfile.id)
             .order("created_at", {
               ascending: false,
             }),
@@ -140,10 +140,7 @@ export default function SpendPage() {
               "id, merchant, amount, currency_code, category, transaction_date, notes, card_id"
             )
             .eq("user_id", user.id)
-            .eq(
-              "profile_id",
-              activeProfile.id
-            )
+            .eq("profile_id", activeProfile.id)
             .order("transaction_date", {
               ascending: false,
             })
@@ -174,9 +171,7 @@ export default function SpendPage() {
       }
 
       if (transactionsResult.error) {
-        console.error(
-          transactionsResult.error
-        );
+        console.error(transactionsResult.error);
 
         setError(
           transactionsResult.error.message ||
@@ -217,6 +212,7 @@ export default function SpendPage() {
     );
     setNotes("");
     setEditingTransactionId(null);
+    setOpenMenuId(null);
   };
 
   const handleSubmit = async (
@@ -289,17 +285,14 @@ export default function SpendPage() {
             .update({
               card_id:
                 selectedCard?.id ?? null,
-              merchant:
-                trimmedMerchant,
-              amount:
-                numericAmount,
+              merchant: trimmedMerchant,
+              amount: numericAmount,
               currency_code:
                 activeProfile.currency_code,
               category,
               transaction_date:
                 transactionDate,
-              notes:
-                notes.trim() || null,
+              notes: notes.trim() || null,
               updated_at:
                 new Date().toISOString(),
             })
@@ -341,21 +334,17 @@ export default function SpendPage() {
             .from("spend_transactions")
             .insert({
               user_id: user.id,
-              profile_id:
-                activeProfile.id,
+              profile_id: activeProfile.id,
               card_id:
                 selectedCard?.id ?? null,
-              merchant:
-                trimmedMerchant,
-              amount:
-                numericAmount,
+              merchant: trimmedMerchant,
+              amount: numericAmount,
               currency_code:
                 activeProfile.currency_code,
               category,
               transaction_date:
                 transactionDate,
-              notes:
-                notes.trim() || null,
+              notes: notes.trim() || null,
             })
             .select(
               "id, merchant, amount, currency_code, category, transaction_date, notes, card_id"
@@ -401,9 +390,7 @@ export default function SpendPage() {
     );
     setCategory(transaction.category);
 
-    setCardId(
-      transaction.card_id ?? ""
-    );
+    setCardId(transaction.card_id ?? "");
 
     setTransactionDate(
       transaction.transaction_date
@@ -411,9 +398,8 @@ export default function SpendPage() {
 
     setNotes(transaction.notes ?? "");
 
-    setEditingTransactionId(
-      transaction.id
-    );
+    setEditingTransactionId(transaction.id);
+    setOpenMenuId(null);
 
     setError("");
     setSuccessMessage("");
@@ -439,6 +425,7 @@ export default function SpendPage() {
       setDeletingTransactionId(
         transaction.id
       );
+      setOpenMenuId(null);
       setError("");
       setSuccessMessage("");
 
@@ -465,14 +452,8 @@ export default function SpendPage() {
         await supabase
           .from("spend_transactions")
           .delete()
-          .eq(
-            "id",
-            transaction.id
-          )
-          .eq(
-            "user_id",
-            user.id
-          )
+          .eq("id", transaction.id)
+          .eq("user_id", user.id)
           .eq(
             "profile_id",
             activeProfile.id
@@ -493,8 +474,7 @@ export default function SpendPage() {
       setTransactions((current) =>
         current.filter(
           (item) =>
-            item.id !==
-            transaction.id
+            item.id !== transaction.id
         )
       );
 
@@ -542,8 +522,7 @@ export default function SpendPage() {
 
     const card = cards.find(
       (item) =>
-        item.id ===
-        transaction.card_id
+        item.id === transaction.card_id
     );
 
     return card?.name ?? "Card";
@@ -933,15 +912,12 @@ export default function SpendPage() {
                           <button
                             type="button"
                             onClick={() =>
-                              setEditingTransactionId(
-                                (
-                                  current
-                                ) =>
-                                  current ===
+                              setOpenMenuId(
+                                openMenuId ===
                                   transaction.id
-                                    ? null
-                                    : transaction.id
-                                )
+                                  ? null
+                                  : transaction.id
+                              )
                             }
                             className="flex h-9 w-9 items-center justify-center rounded-lg text-lg text-[var(--muted)] transition hover:bg-slate-100 hover:text-[var(--foreground)] dark:hover:bg-slate-800"
                             aria-label={`Options for ${transaction.merchant}`}
@@ -949,9 +925,9 @@ export default function SpendPage() {
                             ⋮
                           </button>
 
-                          {editingTransactionId ===
+                          {openMenuId ===
                             transaction.id && (
-                            <div className="absolute right-0 top-10 z-20 w-40 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] p-1 shadow-lg">
+                            <div className="absolute right-0 top-10 z-20 w-44 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] p-1 shadow-lg">
                               <button
                                 type="button"
                                 onClick={() =>
