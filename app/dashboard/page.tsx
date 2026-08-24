@@ -259,10 +259,14 @@ export default function Home() {
                 key={action.title}
                 type="button"
                 onClick={() => {
-                  if (action.title === "Add Card") {
-                    router.push("/cards/add");
-                  }
-                }}
+  if (action.title === "Add Card") {
+    router.push("/cards/add");
+  }
+
+  if (action.title === "Track Spend") {
+    router.push("/spend");
+  }
+}}
                 className="group rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:brightness-95"
               >
                 <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-lg font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
@@ -481,11 +485,12 @@ export default function Home() {
             </div>
 
             <button
-              type="button"
-              className="mt-5 w-full rounded-xl border border-[var(--border)] py-2.5 text-sm font-semibold transition hover:bg-slate-100 dark:hover:bg-slate-800"
-            >
-              Track a purchase
-            </button>
+  type="button"
+  onClick={() => router.push("/spend")}
+  className="mt-5 w-full rounded-xl border border-[var(--border)] py-2.5 text-sm font-semibold transition hover:bg-slate-100 dark:hover:bg-slate-800"
+>
+  Track a purchase
+</button>
           </div>
         </section>
 
