@@ -1,10 +1,12 @@
 export type RewardRule = {
   id: string;
+
   bank: string;
   card_name: string;
   variant: string | null;
 
   category: string | null;
+  merchant_pattern: string | null;
 
   rule_type: "base" | "category";
 
@@ -14,8 +16,12 @@ export type RewardRule = {
     | "flat";
 
   reward_value: number;
-
   reward_currency: string;
+
+  reward_value_unit: string | null;
+
+  min_spend: number | null;
+  max_spend: number | null;
 
   cap_amount: number | null;
 
@@ -30,11 +36,14 @@ export type RewardRule = {
 
   valid_from: string | null;
   valid_to: string | null;
+
+  notes: string | null;
 };
 
 export type RewardCalculationInput = {
   amount: number;
   category: string;
+  merchant: string;
   transactionDate: string;
 
   card: {
@@ -70,7 +79,7 @@ export type RewardCalculationResult = {
 function ruleMatchesCard(
   rule: RewardRule,
   card: RewardCalculationInput["card"]
-) {
+): boolean {
   if (rule.bank !== card.bank) {
     return false;
   }
@@ -92,7 +101,7 @@ function ruleMatchesCard(
 function ruleMatchesDate(
   rule: RewardRule,
   transactionDate: string
-) {
+): boolean {
   if (
     rule.valid_from &&
     transactionDate < rule.valid_from
@@ -110,15 +119,62 @@ function ruleMatchesDate(
   return true;
 }
 
+function ruleMatchesSpendRange(
+  rule: RewardRule,
+  amount: number
+): boolean {
+  if (
+    rule.min_spend !== null &&
+    amount < rule.min_spend
+  ) {
+    return false;
+  }
+
+  if (
+    rule.max_spend !== null &&
+    amount > rule.max_spend
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+function ruleMatchesMerchant(
+  rule: RewardRule,
+  merchant: string
+): boolean {
+  if (!rule.merchant_pattern) {
+    return true;
+  }
+
+  const normalizedMerchant =
+    merchant.trim().toLowerCase();
+
+  const pattern =
+    rule.merchant_pattern
+      .trim()
+      .toLowerCase();
+
+  if (!pattern) {
+    return true;
+  }
+
+  return normalizedMerchant.includes(pattern);
+}
+
 function calculateRewardValue(
   amount: number,
   rule: RewardRule
-) {
+): number {
   if (rule.reward_type === "percentage") {
     return amount * (rule.reward_value / 100);
   }
 
-  if (rule.reward_type === "points_per_100") {
+  if (
+    rule.reward_type ===
+    "points_per_100"
+  ) {
     return (
       amount *
       (rule.reward_value / 100)
@@ -130,6 +186,31 @@ function calculateRewardValue(
   }
 
   return 0;
+}
+
+function sortRules(
+  rules: RewardRule[]
+): RewardRule[] {
+  return [...rules].sort(
+    (a, b) => {
+      /*
+       * Category rules take precedence over base rules.
+       * Within the same type, the higher priority wins.
+       */
+      if (
+        a.rule_type !== b.rule_type
+      ) {
+        return a.rule_type ===
+          "category"
+          ? -1
+          : 1;
+      }
+
+      return (
+        b.priority - a.priority
+      );
+    }
+  );
 }
 
 export function calculateReward(
@@ -149,21 +230,62 @@ export function calculateReward(
       rewardRuleId: null,
       rewardRuleType: null,
       rewardType: null,
-      notes: ["Invalid transaction amount."],
+      notes: [
+        "Invalid transaction amount.",
+      ],
     };
   }
 
-  const matchingRules = rules.filter(
-    (rule) =>
-      !rule.excluded &&
-      ruleMatchesCard(rule, input.card) &&
-      ruleMatchesDate(
-        rule,
-        input.transactionDate
-      )
-  );
+  const matchingRules =
+    rules.filter(
+      (rule) => {
+        if (rule.excluded) {
+          return false;
+        }
 
-  if (matchingRules.length === 0) {
+        if (
+          !ruleMatchesCard(
+            rule,
+            input.card
+          )
+        ) {
+          return false;
+        }
+
+        if (
+          !ruleMatchesDate(
+            rule,
+            input.transactionDate
+          )
+        ) {
+          return false;
+        }
+
+        if (
+          !ruleMatchesSpendRange(
+            rule,
+            input.amount
+          )
+        ) {
+          return false;
+        }
+
+        if (
+          !ruleMatchesMerchant(
+            rule,
+            input.merchant
+          )
+        ) {
+          return false;
+        }
+
+        return true;
+      }
+    );
+
+  if (
+    matchingRules.length === 0
+  ) {
     return {
       eligible: false,
       rewardAmount: 0,
@@ -172,33 +294,30 @@ export function calculateReward(
       rewardRuleType: null,
       rewardType: null,
       notes: [
-        "No reward rule is currently configured for this card.",
+        "No reward rule is currently configured for this card and transaction.",
       ],
     };
   }
 
   const categoryRules =
-    matchingRules
-      .filter(
+    sortRules(
+      matchingRules.filter(
         (rule) =>
-          rule.rule_type === "category" &&
-          rule.category === input.category
+          rule.rule_type ===
+            "category" &&
+          rule.category ===
+            input.category
       )
-      .sort(
-        (a, b) =>
-          b.priority - a.priority
-      );
+    );
 
   const baseRules =
-    matchingRules
-      .filter(
+    sortRules(
+      matchingRules.filter(
         (rule) =>
-          rule.rule_type === "base"
+          rule.rule_type ===
+          "base"
       )
-      .sort(
-        (a, b) =>
-          b.priority - a.priority
-      );
+    );
 
   const selectedRule =
     categoryRules[0] ??
@@ -245,7 +364,31 @@ export function calculateReward(
     selectedRule.cap_amount !== null
   ) {
     notes.push(
-      "Monthly reward cap exists and requires monthly transaction aggregation."
+      "Monthly reward cap exists and will be applied when monthly spend aggregation is available."
+    );
+  }
+
+  if (
+    selectedRule.merchant_pattern
+  ) {
+    notes.push(
+      `Merchant-specific rule matched: ${selectedRule.merchant_pattern}.`
+    );
+  }
+
+  if (
+    selectedRule.min_spend !== null
+  ) {
+    notes.push(
+      `Minimum eligible spend: ${selectedRule.min_spend}.`
+    );
+  }
+
+  if (
+    selectedRule.max_spend !== null
+  ) {
+    notes.push(
+      `Maximum eligible spend: ${selectedRule.max_spend}.`
     );
   }
 
@@ -254,7 +397,8 @@ export function calculateReward(
     rewardAmount,
     rewardCurrency:
       selectedRule.reward_currency,
-    rewardRuleId: selectedRule.id,
+    rewardRuleId:
+      selectedRule.id,
     rewardRuleType:
       selectedRule.rule_type,
     rewardType:
