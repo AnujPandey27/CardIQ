@@ -4,9 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import CardIQHeader from "@/components/CardIQHeader";
-import {
-  useCardIQProfile,
-} from "@/components/ProfileProvider";
+import { useCardIQProfile } from "@/components/ProfileProvider";
 import {
   calculateReward,
   RewardRule,
@@ -53,11 +51,8 @@ export default function RewardsPage() {
   const [rules, setRules] =
     useState<RewardRule[]>([]);
 
-  const [loading, setLoading] =
-    useState(true);
-
-  const [error, setError] =
-    useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     const loadRewards = async () => {
@@ -97,10 +92,7 @@ export default function RewardsPage() {
           .select(
             "id, name, bank, network, variant"
           )
-          .eq(
-            "user_id",
-            user.id
-          )
+          .eq("user_id", user.id)
           .eq(
             "profile_id",
             activeProfile.id
@@ -111,30 +103,25 @@ export default function RewardsPage() {
           .select(
             "id, merchant, amount, category, transaction_date, card_id"
           )
-          .eq(
-            "user_id",
-            user.id
-          )
+          .eq("user_id", user.id)
           .eq(
             "profile_id",
             activeProfile.id
           )
-          .order(
-            "transaction_date",
-            {
-              ascending: false,
-            }
-          ),
+          .order("transaction_date", {
+            ascending: false,
+          }),
 
         supabase
           .from("reward_rules")
           .select(
-            "id, bank, card_name, variant, category, rule_type, reward_type, reward_value, reward_currency, cap_amount, cap_period, excluded, priority, valid_from, valid_to"
+            "id, bank, card_name, variant, category, merchant_pattern, rule_type, reward_type, reward_value, reward_currency, reward_value_unit, min_spend, max_spend, cap_amount, cap_period, excluded, priority, valid_from, valid_to, notes"
           ),
       ]);
 
       if (cardsResult.error) {
         console.error(cardsResult.error);
+
         setError(
           cardsResult.error.message ||
             "Unable to load your cards."
@@ -145,6 +132,7 @@ export default function RewardsPage() {
         console.error(
           transactionsResult.error
         );
+
         setError(
           transactionsResult.error.message ||
             "Unable to load your purchases."
@@ -155,16 +143,14 @@ export default function RewardsPage() {
         console.error(
           rulesResult.error
         );
+
         setError(
           rulesResult.error.message ||
             "Unable to load reward rules."
         );
       }
 
-      setCards(
-        cardsResult.data ?? []
-      );
-
+      setCards(cardsResult.data ?? []);
       setTransactions(
         transactionsResult.data ?? []
       );
@@ -215,10 +201,16 @@ export default function RewardsPage() {
                   Number(
                     transaction.amount
                   ),
+
                 category:
                   transaction.category,
+
+                merchant:
+                  transaction.merchant,
+
                 transactionDate:
                   transaction.transaction_date,
+
                 card: {
                   bank: card.bank,
                   name: card.name,
@@ -273,7 +265,9 @@ export default function RewardsPage() {
         }
       ).format(value);
     } catch {
-      return `${currency} ${value.toFixed(2)}`;
+      return `${currency} ${value.toFixed(
+        2
+      )}`;
     }
   };
 
@@ -325,6 +319,7 @@ export default function RewardsPage() {
       <CardIQHeader />
 
       <div className="mx-auto max-w-6xl px-5 py-8 lg:px-8 lg:py-10">
+        {/* Header */}
         <section className="mb-8">
           <p className="mb-2 text-sm font-medium text-[var(--muted)]">
             {activeProfile.name} profile
