@@ -18,7 +18,9 @@ export type RewardRule = {
   reward_value: number;
   reward_currency: string;
 
-  reward_value_unit: string | null;
+  reward_value_unit:
+    | string
+    | null;
 
   min_spend: number | null;
   max_spend: number | null;
@@ -38,6 +40,10 @@ export type RewardRule = {
   valid_to: string | null;
 
   notes: string | null;
+
+  source_url: string | null;
+  source_name: string | null;
+  verified_at: string | null;
 };
 
 export type RewardCalculationInput = {
@@ -163,6 +169,20 @@ function ruleMatchesMerchant(
   return normalizedMerchant.includes(pattern);
 }
 
+function ruleMatchesCategory(
+  rule: RewardRule,
+  category: string
+): boolean {
+  if (!rule.category) {
+    return true;
+  }
+
+  return (
+    rule.category.trim().toLowerCase() ===
+    category.trim().toLowerCase()
+  );
+}
+
 function calculateRewardValue(
   amount: number,
   rule: RewardRule
@@ -193,10 +213,12 @@ function sortRules(
 ): RewardRule[] {
   return [...rules].sort(
     (a, b) => {
-      /*
-       * Category rules take precedence over base rules.
-       * Within the same type, the higher priority wins.
-       */
+      if (
+        a.priority !== b.priority
+      ) {
+        return b.priority - a.priority;
+      }
+
       if (
         a.rule_type !== b.rule_type
       ) {
@@ -206,10 +228,37 @@ function sortRules(
           : 1;
       }
 
-      return (
-        b.priority - a.priority
-      );
+      return 0;
     }
+  );
+}
+
+function getApplicableRules(
+  input: RewardCalculationInput,
+  rules: RewardRule[]
+): RewardRule[] {
+  return rules.filter(
+    (rule) =>
+      ruleMatchesCard(
+        rule,
+        input.card
+      ) &&
+      ruleMatchesDate(
+        rule,
+        input.transactionDate
+      ) &&
+      ruleMatchesSpendRange(
+        rule,
+        input.amount
+      ) &&
+      ruleMatchesMerchant(
+        rule,
+        input.merchant
+      ) &&
+      ruleMatchesCategory(
+        rule,
+        input.category
+      )
   );
 }
 
@@ -217,8 +266,6 @@ export function calculateReward(
   input: RewardCalculationInput,
   rules: RewardRule[]
 ): RewardCalculationResult {
-  const notes: string[] = [];
-
   if (
     !Number.isFinite(input.amount) ||
     input.amount <= 0
@@ -236,55 +283,14 @@ export function calculateReward(
     };
   }
 
-  const matchingRules =
-    rules.filter(
-      (rule) => {
-        if (rule.excluded) {
-          return false;
-        }
-
-        if (
-          !ruleMatchesCard(
-            rule,
-            input.card
-          )
-        ) {
-          return false;
-        }
-
-        if (
-          !ruleMatchesDate(
-            rule,
-            input.transactionDate
-          )
-        ) {
-          return false;
-        }
-
-        if (
-          !ruleMatchesSpendRange(
-            rule,
-            input.amount
-          )
-        ) {
-          return false;
-        }
-
-        if (
-          !ruleMatchesMerchant(
-            rule,
-            input.merchant
-          )
-        ) {
-          return false;
-        }
-
-        return true;
-      }
+  const applicableRules =
+    getApplicableRules(
+      input,
+      rules
     );
 
   if (
-    matchingRules.length === 0
+    applicableRules.length === 0
   ) {
     return {
       eligible: false,
@@ -299,26 +305,84 @@ export function calculateReward(
     };
   }
 
+  /*
+   * Exclusion rules always take precedence.
+   *
+   * Example:
+   * Base reward = 1%
+   * Category reward = 5%
+   * Exclusion = 0%
+   *
+   * If the exclusion matches, the transaction earns
+   * zero reward regardless of the other earning rules.
+   */
+  const exclusionRules =
+    sortRules(
+      applicableRules.filter(
+        (rule) =>
+          rule.excluded
+      )
+    );
+
+  if (
+    exclusionRules.length > 0
+  ) {
+    const exclusionRule =
+      exclusionRules[0];
+
+    const notes = [
+      "This transaction matches an excluded spend category or merchant.",
+    ];
+
+    if (
+      exclusionRule.notes
+    ) {
+      notes.push(
+        exclusionRule.notes
+      );
+    }
+
+    return {
+      eligible: false,
+      rewardAmount: 0,
+      rewardCurrency:
+        exclusionRule.reward_currency ||
+        null,
+      rewardRuleId:
+        exclusionRule.id,
+      rewardRuleType:
+        exclusionRule.rule_type,
+      rewardType:
+        exclusionRule.reward_type,
+      notes,
+    };
+  }
+
   const categoryRules =
     sortRules(
-      matchingRules.filter(
+      applicableRules.filter(
         (rule) =>
+          !rule.excluded &&
           rule.rule_type ===
             "category" &&
-          rule.category ===
-            input.category
+          rule.category !== null
       )
     );
 
   const baseRules =
     sortRules(
-      matchingRules.filter(
+      applicableRules.filter(
         (rule) =>
+          !rule.excluded &&
           rule.rule_type ===
-          "base"
+            "base"
       )
     );
 
+  /*
+   * Category/merchant-specific rules beat base rules.
+   * Priority is considered before rule type.
+   */
   const selectedRule =
     categoryRules[0] ??
     baseRules[0];
@@ -343,19 +407,24 @@ export function calculateReward(
       selectedRule
     );
 
+  const notes: string[] = [];
+
   if (
     selectedRule.cap_period ===
       "transaction" &&
     selectedRule.cap_amount !== null
   ) {
-    rewardAmount = Math.min(
-      rewardAmount,
+    if (
+      rewardAmount >
       selectedRule.cap_amount
-    );
+    ) {
+      rewardAmount =
+        selectedRule.cap_amount;
 
-    notes.push(
-      "Transaction-level reward cap applied."
-    );
+      notes.push(
+        "Transaction-level reward cap applied."
+      );
+    }
   }
 
   if (
@@ -377,6 +446,14 @@ export function calculateReward(
   }
 
   if (
+    selectedRule.category
+  ) {
+    notes.push(
+      `Category rule matched: ${selectedRule.category}.`
+    );
+  }
+
+  if (
     selectedRule.min_spend !== null
   ) {
     notes.push(
@@ -389,6 +466,14 @@ export function calculateReward(
   ) {
     notes.push(
       `Maximum eligible spend: ${selectedRule.max_spend}.`
+    );
+  }
+
+  if (
+    selectedRule.notes
+  ) {
+    notes.push(
+      selectedRule.notes
     );
   }
 
