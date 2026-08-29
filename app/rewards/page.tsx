@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import CardIQHeader from "@/components/CardIQHeader";
 import { useCardIQProfile } from "@/components/ProfileProvider";
 import {
-  calculateReward,
+  calculateRewardsForTransactions,
   RewardRule,
 } from "@/lib/rewards";
 
@@ -33,6 +33,7 @@ type RewardSummary = {
   eligible: boolean;
   rewardAmount: number;
   rewardCurrency: string | null;
+  rewardBucket: string | null;
   notes: string[];
 };
 
@@ -45,11 +46,10 @@ export default function RewardsPage() {
   } = useCardIQProfile();
 
   const [cards, setCards] = useState<Card[]>([]);
-  const [transactions, setTransactions] =
-    useState<SpendTransaction[]>([]);
-
-  const [rules, setRules] =
-    useState<RewardRule[]>([]);
+  const [transactions, setTransactions] = useState<
+    SpendTransaction[]
+  >([]);
+  const [rules, setRules] = useState<RewardRule[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -108,14 +108,27 @@ export default function RewardsPage() {
             "profile_id",
             activeProfile.id
           )
-          .order("transaction_date", {
-            ascending: false,
-          }),
+          .order(
+            "transaction_date",
+            {
+              ascending: true,
+            }
+          )
+          .order(
+            "created_at",
+            {
+              ascending: true,
+            }
+          ),
 
         supabase
           .from("reward_rules")
           .select(
-            "id, bank, card_name, variant, category, merchant_pattern, rule_type, reward_type, reward_value, reward_currency, reward_value_unit, min_spend, max_spend, cap_amount, cap_period, excluded, priority, valid_from, valid_to, notes"
+            "id, bank, card_name, variant, category, merchant_pattern, rule_type, reward_type, reward_value, reward_currency, reward_value_unit, reward_unit, redemption_value, redemption_currency, redemption_method, min_spend, max_spend, cap_amount, cap_period, reward_bucket, excluded, priority, valid_from, valid_to, notes, source_url, source_name, verified_at"
+          )
+          .eq(
+            "excluded",
+            false
           ),
       ]);
 
@@ -128,7 +141,9 @@ export default function RewardsPage() {
         );
       }
 
-      if (transactionsResult.error) {
+      if (
+        transactionsResult.error
+      ) {
         console.error(
           transactionsResult.error
         );
@@ -150,7 +165,10 @@ export default function RewardsPage() {
         );
       }
 
-      setCards(cardsResult.data ?? []);
+      setCards(
+        cardsResult.data ?? []
+      );
+
       setTransactions(
         transactionsResult.data ?? []
       );
@@ -170,6 +188,66 @@ export default function RewardsPage() {
     router,
   ]);
 
+  const rewardHistoryInput =
+    useMemo(() => {
+      return transactions
+        .map((transaction) => {
+          const card = cards.find(
+            (item) =>
+              item.id ===
+              transaction.card_id
+          );
+
+          if (!card) {
+            return null;
+          }
+
+          return {
+            id: transaction.id,
+            amount: Number(
+              transaction.amount
+            ),
+            category:
+              transaction.category,
+            merchant:
+              transaction.merchant,
+            transactionDate:
+              transaction.transaction_date,
+            card: {
+              bank: card.bank,
+              name: card.name,
+              variant:
+                card.variant,
+            },
+          };
+        })
+        .filter(
+          (
+            item
+          ): item is NonNullable<
+            typeof item
+          > => item !== null
+        );
+    }, [
+      transactions,
+      cards,
+    ]);
+
+  const rewardResults =
+    useMemo(() => {
+      if (rules.length === 0) {
+        return [];
+      }
+
+      return calculateRewardsForTransactions(
+        rewardHistoryInput,
+        rules
+      );
+    }, [
+      rewardHistoryInput,
+      rules,
+    ]);
+
   const rewardSummaries =
     useMemo<RewardSummary[]>(() => {
       return transactions.map(
@@ -181,45 +259,30 @@ export default function RewardsPage() {
                 transaction.card_id
             ) ?? null;
 
-          if (!card) {
+          const result =
+            rewardResults.find(
+              (item) =>
+                item.transactionId ===
+                transaction.id
+            );
+
+          if (!result) {
             return {
               transaction,
-              card: null,
+              card,
               eligible: false,
               rewardAmount: 0,
               rewardCurrency: null,
-              notes: [
-                "The card used for this transaction is no longer available.",
-              ],
+              rewardBucket: null,
+              notes: card
+                ? [
+                    "No reward calculation is available for this transaction.",
+                  ]
+                : [
+                    "The card used for this transaction is no longer available.",
+                  ],
             };
           }
-
-          const result =
-            calculateReward(
-              {
-                amount:
-                  Number(
-                    transaction.amount
-                  ),
-
-                category:
-                  transaction.category,
-
-                merchant:
-                  transaction.merchant,
-
-                transactionDate:
-                  transaction.transaction_date,
-
-                card: {
-                  bank: card.bank,
-                  name: card.name,
-                  variant:
-                    card.variant,
-                },
-              },
-              rules
-            );
 
           return {
             transaction,
@@ -230,6 +293,8 @@ export default function RewardsPage() {
               result.rewardAmount,
             rewardCurrency:
               result.rewardCurrency,
+            rewardBucket:
+              result.rewardBucket,
             notes:
               result.notes,
           };
@@ -238,7 +303,7 @@ export default function RewardsPage() {
     }, [
       transactions,
       cards,
-      rules,
+      rewardResults,
     ]);
 
   const totalRewardValue =
@@ -251,6 +316,15 @@ export default function RewardsPage() {
       );
     }, [rewardSummaries]);
 
+  const eligibleTransactionCount =
+    useMemo(() => {
+      return rewardSummaries.filter(
+        (summary) =>
+          summary.eligible &&
+          summary.rewardAmount > 0
+      ).length;
+    }, [rewardSummaries]);
+
   const formatCurrency = (
     value: number,
     currency: string
@@ -261,7 +335,8 @@ export default function RewardsPage() {
         {
           style: "currency",
           currency,
-          maximumFractionDigits: 2,
+          maximumFractionDigits:
+            2,
         }
       ).format(value);
     } catch {
@@ -302,7 +377,9 @@ export default function RewardsPage() {
             <button
               type="button"
               onClick={() =>
-                router.push("/profiles")
+                router.push(
+                  "/profiles"
+                )
               }
               className="mt-5 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
             >
@@ -347,6 +424,13 @@ export default function RewardsPage() {
                   activeProfile.currency_code
                 )}
               </p>
+
+              <p className="mt-1 text-xs text-[var(--muted)]">
+                {eligibleTransactionCount} eligible transaction
+                {eligibleTransactionCount === 1
+                  ? ""
+                  : "s"}
+              </p>
             </div>
           </div>
         </section>
@@ -364,15 +448,16 @@ export default function RewardsPage() {
             </h2>
 
             <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)]">
-              Your spending is being recorded correctly, but CardIQ has not
-              yet been given verified reward rules for your cards. We have
-              intentionally not assumed reward rates.
+              Your spending is being recorded correctly, but CardIQ does not
+              yet have verified reward rules for your cards.
             </p>
 
             <button
               type="button"
               onClick={() =>
-                router.push("/spend")
+                router.push(
+                  "/spend"
+                )
               }
               className="mt-5 rounded-xl border border-[var(--border)] px-5 py-3 text-sm font-semibold transition hover:bg-slate-100 dark:hover:bg-slate-800"
             >
@@ -392,7 +477,9 @@ export default function RewardsPage() {
             <button
               type="button"
               onClick={() =>
-                router.push("/spend")
+                router.push(
+                  "/spend"
+                )
               }
               className="mt-5 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
             >
@@ -407,7 +494,8 @@ export default function RewardsPage() {
               </h2>
 
               <p className="mt-1 text-sm text-[var(--muted)]">
-                Based on the reward rules currently configured for your cards.
+                Rewards are calculated across transactions so shared monthly
+                and billing-cycle caps are respected.
               </p>
             </div>
 
@@ -424,16 +512,14 @@ export default function RewardsPage() {
                       <div className="min-w-0">
                         <h3 className="truncate text-sm font-semibold">
                           {
-                            summary
-                              .transaction
+                            summary.transaction
                               .merchant
                           }
                         </h3>
 
                         <p className="mt-1 text-xs text-[var(--muted)]">
                           {
-                            summary
-                              .transaction
+                            summary.transaction
                               .category
                           }{" "}
                           ·{" "}
@@ -444,11 +530,19 @@ export default function RewardsPage() {
 
                         <p className="mt-1 text-xs text-[var(--muted)]">
                           {
-                            summary
-                              .transaction
+                            summary.transaction
                               .transaction_date
                           }
                         </p>
+
+                        {summary.rewardBucket && (
+                          <p className="mt-1 text-xs text-[var(--muted)]">
+                            Bucket:{" "}
+                            {
+                              summary.rewardBucket
+                            }
+                          </p>
+                        )}
 
                         {summary.notes.map(
                           (note) => (
@@ -474,7 +568,7 @@ export default function RewardsPage() {
                                 summary.rewardCurrency ??
                                   activeProfile.currency_code
                               )
-                            : "Not configured"}
+                            : "Not eligible"}
                         </p>
                       </div>
                     </div>
