@@ -1750,16 +1750,25 @@ function AddCardForm() {
       router.push("/dashboard");
       router.refresh();
     } catch (err) {
-      console.error(err);
+  console.error("Card save error:", err);
 
-      setError(
-        err instanceof Error
-          ? err.message
-          : isEditMode
-            ? "Something went wrong while updating your card."
-            : "Something went wrong while adding your card."
-      );
-    } finally {
+  const errorMessage =
+    err &&
+    typeof err === "object" &&
+    "message" in err
+      ? String(
+          (err as { message: unknown })
+            .message
+        )
+      : null;
+
+  setError(
+    errorMessage ||
+      (isEditMode
+        ? "Something went wrong while updating your card."
+        : "Something went wrong while adding your card.")
+  );
+} finally {
       setSaving(false);
     }
   };
