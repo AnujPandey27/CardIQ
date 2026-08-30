@@ -122,14 +122,10 @@ export default function RewardsPage() {
           ),
 
         supabase
-          .from("reward_rules")
-          .select(
-            "id, bank, card_name, variant, category, merchant_pattern, rule_type, reward_type, reward_value, reward_currency, reward_value_unit, reward_unit, redemption_value, redemption_currency, redemption_method, min_spend, max_spend, cap_amount, cap_period, reward_bucket, excluded, priority, valid_from, valid_to, notes, source_url, source_name, verified_at"
-          )
-          .eq(
-            "excluded",
-            false
-          ),
+  .from("reward_rules")
+  .select(
+    "id, bank, card_name, variant, category, merchant_pattern, rule_type, reward_type, reward_value, reward_currency, reward_value_unit, reward_unit, redemption_value, redemption_currency, redemption_method, min_spend, max_spend, cap_amount, cap_period, reward_bucket, excluded, priority, valid_from, valid_to, notes, source_url, source_name, verified_at"
+  ),
       ]);
 
       if (cardsResult.error) {
