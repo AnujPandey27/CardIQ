@@ -130,6 +130,7 @@ function parseCsvLine(
       values.push(
         current.trim()
       );
+
       current = "";
       continue;
     }
@@ -137,7 +138,9 @@ function parseCsvLine(
     current += character;
   }
 
-  values.push(current.trim());
+  values.push(
+    current.trim()
+  );
 
   return values;
 }
@@ -159,7 +162,8 @@ function parseCsv(
     index < cleaned.length;
     index += 1
   ) {
-    const character = cleaned[index];
+    const character =
+      cleaned[index];
 
     if (character === '"') {
       if (
@@ -183,7 +187,9 @@ function parseCsv(
     ) {
       if (current.trim()) {
         rows.push(
-          parseCsvLine(current)
+          parseCsvLine(
+            current
+          )
         );
       }
 
@@ -208,11 +214,15 @@ function findColumnIndex(
   candidates: string[]
 ): number {
   const normalizedHeaders =
-    headers.map(normalizeHeader);
+    headers.map(
+      normalizeHeader
+    );
 
   for (const candidate of candidates) {
     const normalizedCandidate =
-      normalizeHeader(candidate);
+      normalizeHeader(
+        candidate
+      );
 
     const exactIndex =
       normalizedHeaders.indexOf(
@@ -236,7 +246,10 @@ function parseAmount(
 
   const cleaned = raw
     .replace(/,/g, "")
-    .replace(/[₹$€£\s]/g, "")
+    .replace(
+      /[₹$€£\s]/g,
+      ""
+    )
     .trim();
 
   if (!cleaned) {
@@ -252,11 +265,16 @@ function parseAmount(
       .replace(/[()]/g, "")
       .trim();
 
-  const numeric = Number(
-    withoutParens
-  );
+  const numeric =
+    Number(
+      withoutParens
+    );
 
-  if (!Number.isFinite(numeric)) {
+  if (
+    !Number.isFinite(
+      numeric
+    )
+  ) {
     return null;
   }
 
@@ -268,30 +286,33 @@ function parseAmount(
 function parseDate(
   raw: string
 ): string | null {
-  const value = raw.trim();
+  const value =
+    raw.trim();
 
   if (!value) {
     return null;
   }
 
-  /*
-   * ISO date: 2026-08-29
-   */
   const isoMatch =
     value.match(
       /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/
     );
 
   if (isoMatch) {
-    const year = Number(
-      isoMatch[1]
-    );
-    const month = Number(
-      isoMatch[2]
-    );
-    const day = Number(
-      isoMatch[3]
-    );
+    const year =
+      Number(
+        isoMatch[1]
+      );
+
+    const month =
+      Number(
+        isoMatch[2]
+      );
+
+    const day =
+      Number(
+        isoMatch[3]
+      );
 
     if (
       year >= 1900 &&
@@ -302,32 +323,43 @@ function parseDate(
     ) {
       return `${String(
         year
-      ).padStart(4, "0")}-${String(
+      ).padStart(
+        4,
+        "0"
+      )}-${String(
         month
-      ).padStart(2, "0")}-${String(
+      ).padStart(
+        2,
+        "0"
+      )}-${String(
         day
-      ).padStart(2, "0")}`;
+      ).padStart(
+        2,
+        "0"
+      )}`;
     }
   }
 
-  /*
-   * DD/MM/YYYY or DD-MM-YYYY
-   */
   const dmyMatch =
     value.match(
       /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/
     );
 
   if (dmyMatch) {
-    const day = Number(
-      dmyMatch[1]
-    );
-    const month = Number(
-      dmyMatch[2]
-    );
-    const year = Number(
-      dmyMatch[3]
-    );
+    const day =
+      Number(
+        dmyMatch[1]
+      );
+
+    const month =
+      Number(
+        dmyMatch[2]
+      );
+
+    const year =
+      Number(
+        dmyMatch[3]
+      );
 
     if (
       year >= 1900 &&
@@ -338,13 +370,20 @@ function parseDate(
     ) {
       return `${year}-${String(
         month
-      ).padStart(2, "0")}-${String(
+      ).padStart(
+        2,
+        "0"
+      )}-${String(
         day
-      ).padStart(2, "0")}`;
+      ).padStart(
+        2,
+        "0"
+      )}`;
     }
   }
 
-  const parsed = new Date(value);
+  const parsed =
+    new Date(value);
 
   if (
     Number.isNaN(
@@ -356,9 +395,15 @@ function parseDate(
 
   return `${parsed.getFullYear()}-${String(
     parsed.getMonth() + 1
-  ).padStart(2, "0")}-${String(
+  ).padStart(
+    2,
+    "0"
+  )}-${String(
     parsed.getDate()
-  ).padStart(2, "0")}`;
+  ).padStart(
+    2,
+    "0"
+  )}`;
 }
 
 function inferCategory(
@@ -424,7 +469,8 @@ function inferCategory(
     )
   ) {
     return {
-      category: "Entertainment",
+      category:
+        "Entertainment",
       classificationMethod:
         "merchant",
     };
@@ -498,7 +544,8 @@ function formatConnectionStatus(
 }
 
 export default function SpendPage() {
-  const router = useRouter();
+  const router =
+    useRouter();
 
   const {
     activeProfile,
@@ -508,7 +555,9 @@ export default function SpendPage() {
   const [
     cards,
     setCards,
-  ] = useState<Card[]>([]);
+  ] = useState<Card[]>(
+    []
+  );
 
   const [
     transactions,
@@ -589,7 +638,10 @@ export default function SpendPage() {
   ] = useState(
     new Date()
       .toISOString()
-      .slice(0, 10)
+      .slice(
+        0,
+        10
+      )
   );
 
   const [
@@ -597,9 +649,6 @@ export default function SpendPage() {
     setNotes,
   ] = useState("");
 
-  /*
-   * Import state
-   */
   const [
     selectedImportCardId,
     setSelectedImportCardId,
@@ -634,14 +683,16 @@ export default function SpendPage() {
       null
     );
 
-  const selectedCard = useMemo(
-    () =>
-      cards.find(
-        (card) =>
-          card.id === cardId
-      ),
-    [cards, cardId]
-  );
+  const selectedCard =
+    useMemo(
+      () =>
+        cards.find(
+          (card) =>
+            card.id ===
+            cardId
+        ),
+      [cards, cardId]
+    );
 
   const selectedImportCard =
     useMemo(
@@ -657,21 +708,22 @@ export default function SpendPage() {
       ]
     );
 
-  const totalSpend = useMemo(
-    () =>
-      transactions.reduce(
-        (
-          total,
-          transaction
-        ) =>
-          total +
-          Number(
-            transaction.amount
-          ),
-        0
-      ),
-    [transactions]
-  );
+  const totalSpend =
+    useMemo(
+      () =>
+        transactions.reduce(
+          (
+            total,
+            transaction
+          ) =>
+            total +
+            Number(
+              transaction.amount
+            ),
+          0
+        ),
+      [transactions]
+    );
 
   const importSelectedCount =
     useMemo(
@@ -696,152 +748,192 @@ export default function SpendPage() {
     );
 
   useEffect(() => {
-    const loadData = async () => {
-      if (loadingProfiles) {
-        return;
-      }
+    const loadData =
+      async () => {
+        if (
+          loadingProfiles
+        ) {
+          return;
+        }
 
-      if (!activeProfile?.id) {
-        setCards([]);
-        setTransactions([]);
-        setLoadingCards(false);
-        setLoadingTransactions(false);
-        return;
-      }
+        if (
+          !activeProfile?.id
+        ) {
+          setCards([]);
+          setTransactions(
+            []
+          );
+          setLoadingCards(
+            false
+          );
+          setLoadingTransactions(
+            false
+          );
+          return;
+        }
 
-      const supabase =
-        createClient();
+        const supabase =
+          createClient();
 
-      const {
-        data: { user },
-      } =
-        await supabase.auth.getUser();
+        const {
+          data: {
+            user,
+          },
+        } =
+          await supabase.auth.getUser();
 
-      if (!user) {
-        router.push("/login");
-        return;
-      }
+        if (!user) {
+          router.push(
+            "/login"
+          );
+          return;
+        }
 
-      setLoadingCards(true);
-      setLoadingTransactions(true);
-      setError("");
+        setLoadingCards(
+          true
+        );
 
-      const [
-        cardsResult,
-        transactionsResult,
-      ] = await Promise.all([
-        supabase
-          .from("cards")
-          .select(
-            "id, name, bank, network, variant, card_last_four, connection_type, connection_status, last_synced_at"
-          )
-          .eq(
-            "user_id",
-            user.id
-          )
-          .eq(
-            "profile_id",
-            activeProfile.id
-          )
-          .order(
-            "created_at",
-            {
-              ascending: false,
-            }
-          ),
+        setLoadingTransactions(
+          true
+        );
 
-        supabase
-          .from(
-            "spend_transactions"
-          )
-          .select(
-            "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, merchant_raw, mcc, mcc_description, classification_method, payment_route, transaction_type, source_type, source_transaction_id"
-          )
-          .eq(
-            "user_id",
-            user.id
-          )
-          .eq(
-            "profile_id",
-            activeProfile.id
-          )
-          .order(
-            "transaction_date",
-            {
-              ascending: false,
-            }
-          )
-          .order(
-            "created_at",
-            {
-              ascending: false,
-            }
-          )
-          .limit(100),
-      ]);
+        setError("");
 
-      if (cardsResult.error) {
-        console.error(
+        const [
+          cardsResult,
+          transactionsResult,
+        ] =
+          await Promise.all([
+            supabase
+              .from("cards")
+              .select(
+                "id, name, bank, network, variant, card_last_four, connection_type, connection_status, last_synced_at"
+              )
+              .eq(
+                "user_id",
+                user.id
+              )
+              .eq(
+                "profile_id",
+                activeProfile.id
+              )
+              .order(
+                "created_at",
+                {
+                  ascending:
+                    false,
+                }
+              ),
+
+            supabase
+              .from(
+                "spend_transactions"
+              )
+              .select(
+                "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, merchant_raw, mcc, mcc_description, classification_method, payment_route, transaction_type, source_type, source_transaction_id"
+              )
+              .eq(
+                "user_id",
+                user.id
+              )
+              .eq(
+                "profile_id",
+                activeProfile.id
+              )
+              .order(
+                "transaction_date",
+                {
+                  ascending:
+                    false,
+                }
+              )
+              .order(
+                "created_at",
+                {
+                  ascending:
+                    false,
+                }
+              )
+              .limit(
+                100
+              ),
+          ]);
+
+        if (
           cardsResult.error
-        );
-
-        setError(
-          cardsResult.error.message ||
-            "Unable to load your cards."
-        );
-      } else {
-        const loadedCards =
-          (cardsResult.data ??
-            []) as Card[];
-
-        setCards(
-          loadedCards
-        );
-
-        if (
-          loadedCards.length >
-            0 &&
-          !cardId
         ) {
-          setCardId(
-            loadedCards[0].id
+          console.error(
+            cardsResult.error
           );
+
+          setError(
+            cardsResult.error.message ||
+              "Unable to load your cards."
+          );
+        } else {
+          const loadedCards =
+            (cardsResult.data ??
+              []) as Card[];
+
+          setCards(
+            loadedCards
+          );
+
+          if (
+            loadedCards.length >
+              0 &&
+            !cardId
+          ) {
+            setCardId(
+              loadedCards[0]
+                .id
+            );
+          }
+
+          if (
+            loadedCards.length >
+              0 &&
+            !selectedImportCardId
+          ) {
+            setSelectedImportCardId(
+              loadedCards[0]
+                .id
+            );
+          }
         }
 
         if (
-          loadedCards.length >
-            0 &&
-          !selectedImportCardId
-        ) {
-          setSelectedImportCardId(
-            loadedCards[0].id
-          );
-        }
-      }
-
-      if (
-        transactionsResult.error
-      ) {
-        console.error(
           transactionsResult.error
+        ) {
+          console.error(
+            transactionsResult.error
+          );
+
+          setError(
+            transactionsResult
+              .error
+              .message ||
+              "Unable to load your purchases."
+          );
+
+          setTransactions(
+            []
+          );
+        } else {
+          setTransactions(
+            (transactionsResult.data ??
+              []) as SpendTransaction[]
+          );
+        }
+
+        setLoadingCards(
+          false
         );
 
-        setError(
-          transactionsResult.error.message ||
-            "Unable to load your purchases."
+        setLoadingTransactions(
+          false
         );
-
-        setTransactions([]);
-      } else {
-        setTransactions(
-          (transactionsResult.data ??
-            []) as SpendTransaction[]
-        );
-      }
-
-      setLoadingCards(false);
-      setLoadingTransactions(false);
-    };
+      };
 
     loadData();
   }, [
@@ -850,306 +942,367 @@ export default function SpendPage() {
     router,
   ]);
 
-  const resetForm = () => {
-    setMerchant("");
-    setAmount("");
-    setCategory("Shopping");
-
-    if (cards.length > 0) {
-      setCardId(
-        cards[0].id
+  const resetForm =
+    () => {
+      setMerchant("");
+      setAmount("");
+      setCategory(
+        "Shopping"
       );
-    } else {
-      setCardId("");
-    }
 
-    setTransactionDate(
-      new Date()
-        .toISOString()
-        .slice(0, 10)
-    );
+      if (
+        cards.length > 0
+      ) {
+        setCardId(
+          cards[0].id
+        );
+      } else {
+        setCardId("");
+      }
 
-    setNotes("");
-    setEditingTransactionId(
-      null
-    );
-    setOpenMenuId(null);
-  };
-
-  const handleSubmit = async (
-    event: React.FormEvent<HTMLFormElement>
-  ) => {
-    event.preventDefault();
-
-    setError("");
-    setSuccessMessage("");
-
-    if (!activeProfile?.id) {
-      setError(
-        "No active profile is available."
+      setTransactionDate(
+        new Date()
+          .toISOString()
+          .slice(
+            0,
+            10
+          )
       );
-      return;
-    }
 
-    const trimmedMerchant =
-      merchant.trim();
-
-    const numericAmount =
-      Number(amount);
-
-    if (!trimmedMerchant) {
-      setError(
-        "Please enter the merchant name."
+      setNotes("");
+      setEditingTransactionId(
+        null
       );
-      return;
-    }
+      setOpenMenuId(null);
+    };
 
-    if (
-      !Number.isFinite(
-        numericAmount
-      ) ||
-      numericAmount <= 0
-    ) {
-      setError(
-        "Please enter a valid purchase amount."
-      );
-      return;
-    }
+  const handleSubmit =
+    async (
+      event: React.FormEvent<HTMLFormElement>
+    ) => {
+      event.preventDefault();
 
-    if (!category) {
-      setError(
-        "Please select a category."
-      );
-      return;
-    }
+      setError("");
+      setSuccessMessage("");
 
-    if (!transactionDate) {
-      setError(
-        "Please select a purchase date."
-      );
-      return;
-    }
+      /*
+       * Create a local non-null reference.
+       * This fixes the TypeScript issue that occurred
+       * during the production build.
+       */
+      const profile =
+        activeProfile;
 
-    setSaving(true);
+      if (!profile?.id) {
+        setError(
+          "No active profile is available."
+        );
+        return;
+      }
 
-    try {
-      const supabase =
-        createClient();
+      const trimmedMerchant =
+        merchant.trim();
 
-      const {
-        data: { user },
-      } =
-        await supabase.auth.getUser();
+      const numericAmount =
+        Number(amount);
 
-      if (!user) {
-        router.push("/login");
+      if (!trimmedMerchant) {
+        setError(
+          "Please enter the merchant name."
+        );
         return;
       }
 
       if (
-        editingTransactionId
+        !Number.isFinite(
+          numericAmount
+        ) ||
+        numericAmount <=
+          0
       ) {
-        const {
-          data,
-          error: updateError,
-        } =
-          await supabase
-            .from(
-              "spend_transactions"
-            )
-            .update({
-              card_id:
-                selectedCard?.id ??
-                null,
-              merchant:
-                trimmedMerchant,
-              merchant_raw:
-                trimmedMerchant,
-              amount:
-                numericAmount,
-              currency_code:
-                activeProfile.currency_code,
-              category,
-              classification_method:
-                "manual",
-              transaction_date:
-                transactionDate,
-              notes:
-                notes.trim() ||
-                null,
-              transaction_type:
-                "purchase",
-            })
-            .eq(
-              "id",
-              editingTransactionId
-            )
-            .eq(
-              "user_id",
-              user.id
-            )
-            .eq(
-              "profile_id",
-              activeProfile.id
-            )
-            .select(
-              "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, merchant_raw, mcc, mcc_description, classification_method, payment_route, transaction_type, source_type, source_transaction_id"
-            )
-            .single();
-
-        if (updateError) {
-          throw updateError;
-        }
-
-        setTransactions(
-          (current) =>
-            current.map(
-              (
-                transaction
-              ) =>
-                transaction.id ===
-                data.id
-                  ? (data as SpendTransaction)
-                  : transaction
-            )
+        setError(
+          "Please enter a valid purchase amount."
         );
-
-        setSuccessMessage(
-          "Purchase updated successfully."
-        );
-      } else {
-        const {
-          data,
-          error: insertError,
-        } =
-          await supabase
-            .from(
-              "spend_transactions"
-            )
-            .insert({
-              user_id:
-                user.id,
-              profile_id:
-                activeProfile.id,
-              card_id:
-                selectedCard?.id ??
-                null,
-              merchant:
-                trimmedMerchant,
-              merchant_raw:
-                trimmedMerchant,
-              amount:
-                numericAmount,
-              currency_code:
-                activeProfile.currency_code,
-              category,
-              classification_method:
-                "manual",
-              transaction_date:
-                transactionDate,
-              notes:
-                notes.trim() ||
-                null,
-              transaction_type:
-                "purchase",
-              source_type:
-                "manual",
-            })
-            .select(
-              "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, merchant_raw, mcc, mcc_description, classification_method, payment_route, transaction_type, source_type, source_transaction_id"
-            )
-            .single();
-
-        if (insertError) {
-          throw insertError;
-        }
-
-        setTransactions(
-          (current) => [
-            data as SpendTransaction,
-            ...current,
-          ]
-        );
-
-        setSuccessMessage(
-          "Purchase recorded successfully."
-        );
+        return;
       }
 
-      resetForm();
-    } catch (err) {
-      console.error(
-        "Spend transaction save error:",
-        err
+      if (!category) {
+        setError(
+          "Please select a category."
+        );
+        return;
+      }
+
+      if (
+        !transactionDate
+      ) {
+        setError(
+          "Please select a purchase date."
+        );
+        return;
+      }
+
+      setSaving(true);
+
+      try {
+        const supabase =
+          createClient();
+
+        const {
+          data: {
+            user,
+          },
+        } =
+          await supabase.auth.getUser();
+
+        if (!user) {
+          router.push(
+            "/login"
+          );
+          return;
+        }
+
+        if (
+          editingTransactionId
+        ) {
+          const {
+            data,
+            error:
+              updateError,
+          } =
+            await supabase
+              .from(
+                "spend_transactions"
+              )
+              .update({
+                card_id:
+                  selectedCard?.id ??
+                  null,
+
+                merchant:
+                  trimmedMerchant,
+
+                merchant_raw:
+                  trimmedMerchant,
+
+                amount:
+                  numericAmount,
+
+                currency_code:
+                  profile.currency_code,
+
+                category,
+
+                classification_method:
+                  "manual",
+
+                transaction_date:
+                  transactionDate,
+
+                notes:
+                  notes.trim() ||
+                  null,
+
+                transaction_type:
+                  "purchase",
+              })
+              .eq(
+                "id",
+                editingTransactionId
+              )
+              .eq(
+                "user_id",
+                user.id
+              )
+              .eq(
+                "profile_id",
+                profile.id
+              )
+              .select(
+                "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, merchant_raw, mcc, mcc_description, classification_method, payment_route, transaction_type, source_type, source_transaction_id"
+              )
+              .single();
+
+          if (
+            updateError
+          ) {
+            throw updateError;
+          }
+
+          setTransactions(
+            (
+              current
+            ) =>
+              current.map(
+                (
+                  transaction
+                ) =>
+                  transaction.id ===
+                  data.id
+                    ? (data as SpendTransaction)
+                    : transaction
+              )
+          );
+
+          setSuccessMessage(
+            "Purchase updated successfully."
+          );
+        } else {
+          const {
+            data,
+            error:
+              insertError,
+          } =
+            await supabase
+              .from(
+                "spend_transactions"
+              )
+              .insert({
+                user_id:
+                  user.id,
+
+                profile_id:
+                  profile.id,
+
+                card_id:
+                  selectedCard?.id ??
+                  null,
+
+                merchant:
+                  trimmedMerchant,
+
+                merchant_raw:
+                  trimmedMerchant,
+
+                amount:
+                  numericAmount,
+
+                currency_code:
+                  profile.currency_code,
+
+                category,
+
+                classification_method:
+                  "manual",
+
+                transaction_date:
+                  transactionDate,
+
+                notes:
+                  notes.trim() ||
+                  null,
+
+                transaction_type:
+                  "purchase",
+
+                source_type:
+                  "manual",
+              })
+              .select(
+                "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, merchant_raw, mcc, mcc_description, classification_method, payment_route, transaction_type, source_type, source_transaction_id"
+              )
+              .single();
+
+          if (
+            insertError
+          ) {
+            throw insertError;
+          }
+
+          setTransactions(
+            (
+              current
+            ) => [
+              data as SpendTransaction,
+              ...current,
+            ]
+          );
+
+          setSuccessMessage(
+            "Purchase recorded successfully."
+          );
+        }
+
+        resetForm();
+      } catch (err) {
+        console.error(
+          "Spend transaction save error:",
+          err
+        );
+
+        const message =
+          err &&
+          typeof err ===
+            "object" &&
+          "message" in err
+            ? String(
+                (
+                  err as {
+                    message: unknown;
+                  }
+                ).message
+              )
+            : null;
+
+        setError(
+          message ||
+            (editingTransactionId
+              ? "Unable to update this purchase."
+              : "Unable to record this purchase.")
+        );
+      } finally {
+        setSaving(
+          false
+        );
+      }
+    };
+
+  const handleEditTransaction =
+    (
+      transaction: SpendTransaction
+    ) => {
+      setMerchant(
+        transaction.merchant
       );
 
-      const message =
-        err &&
-        typeof err === "object" &&
-        "message" in err
-          ? String(
-              (
-                err as {
-                  message: unknown;
-                }
-              ).message
-            )
-          : null;
-
-      setError(
-        message ||
-          (editingTransactionId
-            ? "Unable to update this purchase."
-            : "Unable to record this purchase.")
+      setAmount(
+        Number(
+          transaction.amount
+        ).toFixed(2)
       );
-    } finally {
-      setSaving(false);
-    }
-  };
 
-  const handleEditTransaction = (
-    transaction: SpendTransaction
-  ) => {
-    setMerchant(
-      transaction.merchant
-    );
+      setCategory(
+        transaction.category
+      );
 
-    setAmount(
-      Number(
-        transaction.amount
-      ).toFixed(2)
-    );
+      setCardId(
+        transaction.card_id ??
+          ""
+      );
 
-    setCategory(
-      transaction.category
-    );
+      setTransactionDate(
+        transaction.transaction_date
+      );
 
-    setCardId(
-      transaction.card_id ?? ""
-    );
+      setNotes(
+        transaction.notes ??
+          ""
+      );
 
-    setTransactionDate(
-      transaction.transaction_date
-    );
+      setEditingTransactionId(
+        transaction.id
+      );
 
-    setNotes(
-      transaction.notes ?? ""
-    );
+      setOpenMenuId(null);
 
-    setEditingTransactionId(
-      transaction.id
-    );
+      setError("");
+      setSuccessMessage("");
 
-    setOpenMenuId(null);
-
-    setError("");
-    setSuccessMessage("");
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
-  };
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+    };
 
   const handleDeleteTransaction =
     async (
@@ -1176,16 +1329,23 @@ export default function SpendPage() {
         createClient();
 
       const {
-        data: { user },
+        data: {
+          user,
+        },
       } =
         await supabase.auth.getUser();
 
       if (!user) {
-        router.push("/login");
+        router.push(
+          "/login"
+        );
         return;
       }
 
-      if (!activeProfile?.id) {
+      const profile =
+        activeProfile;
+
+      if (!profile?.id) {
         setError(
           "No active profile is available."
         );
@@ -1198,7 +1358,8 @@ export default function SpendPage() {
       }
 
       const {
-        error: deleteError,
+        error:
+          deleteError,
       } =
         await supabase
           .from(
@@ -1215,10 +1376,12 @@ export default function SpendPage() {
           )
           .eq(
             "profile_id",
-            activeProfile.id
+            profile.id
           );
 
-      if (deleteError) {
+      if (
+        deleteError
+      ) {
         console.error(
           deleteError
         );
@@ -1260,519 +1423,574 @@ export default function SpendPage() {
       );
     };
 
-  /*
-   * Convert an uploaded CSV statement into
-   * reviewable CardIQ transaction rows.
-   */
-  const handleStatementFile = async (
-    event: ChangeEvent<HTMLInputElement>
-  ) => {
-    setError("");
-    setSuccessMessage("");
-    setImportRows([]);
-    setImportBatchId(null);
-
-    const file =
-      event.target.files?.[0];
-
-    if (!file) {
-      return;
-    }
-
-    if (!selectedImportCardId) {
-      setError(
-        "Please select the card represented by this statement first."
+  const handleStatementFile =
+    async (
+      event: ChangeEvent<HTMLInputElement>
+    ) => {
+      setError("");
+      setSuccessMessage("");
+      setImportRows([]);
+      setImportBatchId(
+        null
       );
 
-      event.target.value = "";
-      return;
-    }
+      const file =
+        event.target.files?.[0];
 
-    if (
-      !file.name
-        .toLowerCase()
-        .endsWith(".csv")
-    ) {
-      setError(
-        "CSV statement import is available at this stage. PDF and Excel statement processing will be added through the secure document-ingestion layer."
-      );
-
-      event.target.value = "";
-      return;
-    }
-
-    setImportFileName(
-      file.name
-    );
-
-    try {
-      const content =
-        await file.text();
-
-      const rows =
-        parseCsv(content);
-
-      if (
-        rows.length <
-        2
-      ) {
-        throw new Error(
-          "The CSV statement does not contain enough rows to import."
-        );
-      }
-
-      const headers =
-        rows[0];
-
-      const merchantIndex =
-        findColumnIndex(
-          headers,
-          [
-            "merchant",
-            "merchant name",
-            "description",
-            "transaction description",
-            "narration",
-            "details",
-            "particulars",
-          ]
-        );
-
-      const amountIndex =
-        findColumnIndex(
-          headers,
-          [
-            "amount",
-            "transaction amount",
-            "debit",
-            "spend",
-            "purchase amount",
-          ]
-        );
-
-      const dateIndex =
-        findColumnIndex(
-          headers,
-          [
-            "date",
-            "transaction date",
-            "txn date",
-            "transactiondate",
-            "posted date",
-            "value date",
-          ]
-        );
-
-      const categoryIndex =
-        findColumnIndex(
-          headers,
-          [
-            "category",
-            "merchant category",
-          ]
-        );
-
-      const mccIndex =
-        findColumnIndex(
-          headers,
-          [
-            "mcc",
-            "merchant category code",
-          ]
-        );
-
-      const referenceIndex =
-        findColumnIndex(
-          headers,
-          [
-            "transaction id",
-            "transactionid",
-            "reference",
-            "reference number",
-            "transaction reference",
-            "rrn",
-            "txn id",
-          ]
-        );
-
-      const typeIndex =
-        findColumnIndex(
-          headers,
-          [
-            "transaction type",
-            "type",
-            "debit credit",
-          ]
-        );
-
-      if (
-        merchantIndex <
-        0
-      ) {
-        throw new Error(
-          "CardIQ could not identify a merchant/description column in this CSV."
-        );
-      }
-
-      if (
-        amountIndex <
-        0
-      ) {
-        throw new Error(
-          "CardIQ could not identify an amount column in this CSV."
-        );
-      }
-
-      if (
-        dateIndex <
-        0
-      ) {
-        throw new Error(
-          "CardIQ could not identify a transaction date column in this CSV."
-        );
-      }
-
-      const supabase =
-        createClient();
-
-      const {
-        data: {
-          user,
-        },
-      } =
-        await supabase.auth.getUser();
-
-      if (!user) {
-        router.push("/login");
+      if (!file) {
         return;
       }
 
-      /*
-       * Create the import batch before parsing
-       * into the review queue.
-       */
-      const {
-        data: batch,
-        error: batchError,
-      } =
-        await supabase
-          .from(
-            "transaction_import_batches"
-          )
-          .insert({
-            user_id:
-              user.id,
-            profile_id:
-              activeProfile.id,
-            card_id:
-              selectedImportCardId,
-            source_type:
-              "statement_csv",
-            status:
-              "review_required",
-          })
-          .select(
-            "id"
-          )
-          .single();
+      const profile =
+        activeProfile;
 
-      if (batchError) {
-        throw batchError;
+      if (!profile?.id) {
+        setError(
+          "No active profile is available."
+        );
+
+        event.target.value =
+          "";
+
+        return;
       }
 
-      const sourceTransactionIds =
-        rows
-          .slice(1)
-          .map(
-            (row) =>
-              referenceIndex >=
-              0
-                ? row[
-                    referenceIndex
-                  ]?.trim()
-                : ""
-          )
-          .filter(
-            Boolean
-          );
+      if (
+        !selectedImportCardId
+      ) {
+        setError(
+          "Please select the card represented by this statement first."
+        );
 
-      let existingSourceIds =
-        new Set<string>();
+        event.target.value =
+          "";
+
+        return;
+      }
 
       if (
-        sourceTransactionIds.length >
-        0
+        !file.name
+          .toLowerCase()
+          .endsWith(".csv")
       ) {
+        setError(
+          "CSV statement import is available at this stage. PDF and Excel statement processing will be added through the secure document-ingestion layer."
+        );
+
+        event.target.value =
+          "";
+
+        return;
+      }
+
+      setImportFileName(
+        file.name
+      );
+
+      try {
+        const content =
+          await file.text();
+
+        const rows =
+          parseCsv(content);
+
+        if (
+          rows.length <
+          2
+        ) {
+          throw new Error(
+            "The CSV statement does not contain enough rows to import."
+          );
+        }
+
+        const headers =
+          rows[0];
+
+        const merchantIndex =
+          findColumnIndex(
+            headers,
+            [
+              "merchant",
+              "merchant name",
+              "description",
+              "transaction description",
+              "narration",
+              "details",
+              "particulars",
+            ]
+          );
+
+        const amountIndex =
+          findColumnIndex(
+            headers,
+            [
+              "amount",
+              "transaction amount",
+              "debit",
+              "spend",
+              "purchase amount",
+            ]
+          );
+
+        const dateIndex =
+          findColumnIndex(
+            headers,
+            [
+              "date",
+              "transaction date",
+              "txn date",
+              "transactiondate",
+              "posted date",
+              "value date",
+            ]
+          );
+
+        const categoryIndex =
+          findColumnIndex(
+            headers,
+            [
+              "category",
+              "merchant category",
+            ]
+          );
+
+        const mccIndex =
+          findColumnIndex(
+            headers,
+            [
+              "mcc",
+              "merchant category code",
+            ]
+          );
+
+        const referenceIndex =
+          findColumnIndex(
+            headers,
+            [
+              "transaction id",
+              "transactionid",
+              "reference",
+              "reference number",
+              "transaction reference",
+              "rrn",
+              "txn id",
+            ]
+          );
+
+        const typeIndex =
+          findColumnIndex(
+            headers,
+            [
+              "transaction type",
+              "type",
+              "debit credit",
+            ]
+          );
+
+        if (
+          merchantIndex <
+          0
+        ) {
+          throw new Error(
+            "CardIQ could not identify a merchant/description column in this CSV."
+          );
+        }
+
+        if (
+          amountIndex <
+          0
+        ) {
+          throw new Error(
+            "CardIQ could not identify an amount column in this CSV."
+          );
+        }
+
+        if (
+          dateIndex <
+          0
+        ) {
+          throw new Error(
+            "CardIQ could not identify a transaction date column in this CSV."
+          );
+        }
+
+        const supabase =
+          createClient();
+
         const {
-          data: existingRows,
-          error: existingError,
+          data: {
+            user,
+          },
+        } =
+          await supabase.auth.getUser();
+
+        if (!user) {
+          router.push(
+            "/login"
+          );
+          return;
+        }
+
+        const sourceTransactionIds =
+          rows
+            .slice(1)
+            .map(
+              (
+                row
+              ) =>
+                referenceIndex >=
+                0
+                  ? (
+                      row[
+                        referenceIndex
+                      ] ??
+                      ""
+                    ).trim()
+                  : ""
+            )
+            .filter(
+              Boolean
+            );
+
+        let existingSourceIds =
+          new Set<string>();
+
+        if (
+          sourceTransactionIds.length >
+          0
+        ) {
+          const {
+            data:
+              existingRows,
+            error:
+              existingError,
+          } =
+            await supabase
+              .from(
+                "spend_transactions"
+              )
+              .select(
+                "source_transaction_id"
+              )
+              .eq(
+                "user_id",
+                user.id
+              )
+              .eq(
+                "profile_id",
+                profile.id
+              )
+              .eq(
+                "source_type",
+                "statement_csv"
+              )
+              .in(
+                "source_transaction_id",
+                sourceTransactionIds
+              );
+
+          if (
+            existingError
+          ) {
+            throw existingError;
+          }
+
+          existingSourceIds =
+            new Set(
+              (
+                existingRows ??
+                []
+              )
+                .map(
+                  (
+                    row
+                  ) =>
+                    row.source_transaction_id
+                )
+                .filter(
+                  (
+                    value
+                  ): value is string =>
+                    Boolean(
+                      value
+                    )
+                )
+            );
+        }
+
+        const parsedRows: ImportRow[] =
+          [];
+
+        rows
+          .slice(1)
+          .forEach(
+            (
+              row,
+              index
+            ) => {
+              if (
+                row.every(
+                  (
+                    value
+                  ) =>
+                    !value.trim()
+                )
+              ) {
+                return;
+              }
+
+              const rawMerchant =
+                row[
+                  merchantIndex
+                ]?.trim() ??
+                "";
+
+              const numericAmount =
+                parseAmount(
+                  row[
+                    amountIndex
+                  ] ?? ""
+                );
+
+              const parsedDate =
+                parseDate(
+                  row[
+                    dateIndex
+                  ] ?? ""
+                );
+
+              const explicitCategory =
+                categoryIndex >=
+                0
+                  ? (
+                      row[
+                        categoryIndex
+                      ] ?? ""
+                    ).trim()
+                  : "";
+
+              const classification =
+                explicitCategory
+                  ? {
+                      category:
+                        explicitCategory,
+                      classificationMethod:
+                        "statement",
+                    }
+                  : inferCategory(
+                      rawMerchant
+                    );
+
+              const rawType =
+                typeIndex >=
+                0
+                  ? (
+                      row[
+                        typeIndex
+                      ] ?? ""
+                    )
+                      .trim()
+                      .toLowerCase()
+                  : "";
+
+              const transactionType =
+                /refund|reversal|credit/.test(
+                  rawType
+                )
+                  ? "refund"
+                  : "purchase";
+
+              const sourceTransactionId =
+                referenceIndex >=
+                0
+                  ? (
+                      row[
+                        referenceIndex
+                      ] ??
+                      ""
+                    ).trim() ||
+                    null
+                  : null;
+
+              const hasError =
+                !rawMerchant
+                  ? "Merchant/description is missing."
+                  : numericAmount ===
+                        null ||
+                      numericAmount <=
+                        0
+                    ? "Amount could not be read."
+                    : !parsedDate
+                      ? "Transaction date could not be read."
+                      : null;
+
+              const duplicate =
+                Boolean(
+                  sourceTransactionId &&
+                    existingSourceIds.has(
+                      sourceTransactionId
+                    )
+                );
+
+              const mccRaw =
+                mccIndex >= 0
+                  ? (
+                      row[
+                        mccIndex
+                      ] ?? ""
+                    ).trim()
+                  : "";
+
+              parsedRows.push({
+                rowNumber:
+                  index + 2,
+                merchant:
+                  rawMerchant,
+                merchantRaw:
+                  rawMerchant,
+                amount:
+                  Math.abs(
+                    numericAmount ??
+                      0
+                  ),
+                transactionDate:
+                  parsedDate ??
+                  "",
+                category:
+                  classification.category,
+                cardId:
+                  selectedImportCardId,
+                sourceTransactionId,
+                transactionType,
+                paymentRoute:
+                  null,
+                classificationMethod:
+                  mccRaw
+                    ? "mcc"
+                    : classification.classificationMethod,
+                rawValues:
+                  row,
+                duplicate,
+                selected:
+                  !duplicate &&
+                  !hasError,
+                error:
+                  hasError,
+              });
+            }
+          );
+
+        /*
+         * Only create the import batch once the CSV
+         * has passed validation and has rows to review.
+         */
+        const validOrReviewableRows =
+          parsedRows.length >
+          0;
+
+        if (
+          !validOrReviewableRows
+        ) {
+          throw new Error(
+            "No transaction rows could be read from this statement."
+          );
+        }
+
+        const {
+          data: batch,
+          error:
+            batchError,
         } =
           await supabase
             .from(
-              "spend_transactions"
+              "transaction_import_batches"
             )
+            .insert({
+              user_id:
+                user.id,
+              profile_id:
+                profile.id,
+              card_id:
+                selectedImportCardId,
+              source_type:
+                "statement_csv",
+              status:
+                "review_required",
+              transactions_found:
+                parsedRows.length,
+              transactions_skipped:
+                parsedRows.filter(
+                  (
+                    row
+                  ) =>
+                    row.duplicate
+                ).length,
+            })
             .select(
-              "source_transaction_id"
+              "id"
             )
-            .eq(
-              "user_id",
-              user.id
-            )
-            .eq(
-              "profile_id",
-              activeProfile.id
-            )
-            .eq(
-              "source_type",
-              "statement_csv"
-            )
-            .in(
-              "source_transaction_id",
-              sourceTransactionIds
-            );
+            .single();
 
-        if (existingError) {
-          throw existingError;
+        if (
+          batchError
+        ) {
+          throw batchError;
         }
 
-        existingSourceIds =
-          new Set(
-            (
-              existingRows ??
-              []
-            )
-              .map(
-                (
-                  row
-                ) =>
-                  row.source_transaction_id
-              )
-              .filter(
-                (
-                  value
-                ): value is string =>
-                  Boolean(value)
-              )
-          );
-      }
-
-      const parsedRows: ImportRow[] =
-        [];
-
-      rows
-        .slice(1)
-        .forEach(
-          (
-            row,
-            index
-          ) => {
-            if (
-              row.every(
-                (value) =>
-                  !value.trim()
-              )
-            ) {
-              return;
-            }
-
-            const rawMerchant =
-              row[
-                merchantIndex
-              ]?.trim() ??
-              "";
-
-            const numericAmount =
-              parseAmount(
-                row[
-                  amountIndex
-                ] ?? ""
-              );
-
-            const parsedDate =
-              parseDate(
-                row[
-                  dateIndex
-                ] ?? ""
-              );
-
-            const explicitCategory =
-              categoryIndex >=
-              0
-                ? row[
-                    categoryIndex
-                  ]?.trim()
-                : "";
-
-            const classification =
-              explicitCategory
-                ? {
-                    category:
-                      explicitCategory,
-                    classificationMethod:
-                      "statement",
-                  }
-                : inferCategory(
-                    rawMerchant
-                  );
-
-            const rawType =
-              typeIndex >=
-              0
-                ? (
-                    row[
-                      typeIndex
-                    ] ?? ""
-                  )
-                    .trim()
-                    .toLowerCase()
-                : "";
-
-            const transactionType =
-              /refund|reversal|credit/.test(
-                rawType
-              )
-                ? "refund"
-                : "purchase";
-
-            const sourceTransactionId =
-              referenceIndex >=
-              0
-                ? (
-                    row[
-                      referenceIndex
-                    ] ?? ""
-                  ).trim() ||
-                  null
-                : null;
-
-            const hasError =
-              !rawMerchant
-                ? "Merchant/description is missing."
-                : numericAmount ===
-                    null ||
-                  numericAmount <=
-                    0
-                ? "Amount could not be read."
-                : !parsedDate
-                  ? "Transaction date could not be read."
-                  : null;
-
-            const duplicate =
-              Boolean(
-                sourceTransactionId &&
-                  existingSourceIds.has(
-                    sourceTransactionId
-                  )
-              );
-
-            const mccRaw =
-              mccIndex >= 0
-                ? row[
-                    mccIndex
-                  ]?.trim()
-                : "";
-
-            parsedRows.push({
-              rowNumber:
-                index + 2,
-              merchant:
-                rawMerchant,
-              merchantRaw:
-                rawMerchant,
-              amount:
-                Math.abs(
-                  numericAmount ??
-                    0
-                ),
-              transactionDate:
-                parsedDate ??
-                "",
-              category:
-                classification.category,
-              cardId:
-                selectedImportCardId,
-              sourceTransactionId,
-              transactionType,
-              paymentRoute:
-                null,
-              classificationMethod:
-                mccRaw
-                  ? "mcc"
-                  : classification.classificationMethod,
-              rawValues:
-                row,
-              duplicate,
-              selected:
-                !duplicate &&
-                !hasError,
-              error:
-                hasError,
-            });
-          }
-        );
-
-      setImportBatchId(
-        batch.id
-      );
-
-      setImportRows(
-        parsedRows
-      );
-
-      const validRows =
-        parsedRows.filter(
-          (row) =>
-            !row.error &&
-            !row.duplicate
-        ).length;
-
-      await supabase
-        .from(
-          "transaction_import_batches"
-        )
-        .update({
-          transactions_found:
-            parsedRows.length,
-          transactions_skipped:
-            parsedRows.filter(
-              (row) =>
-                row.duplicate
-            ).length,
-          status:
-            "review_required",
-        })
-        .eq(
-          "id",
+        setImportBatchId(
           batch.id
-        )
-        .eq(
-          "user_id",
-          user.id
         );
 
-      setSuccessMessage(
-        `${parsedRows.length} transaction${
-          parsedRows.length ===
-          1
-            ? ""
-            : "s"
-        } found. ${validRows} ready for review.`
-      );
-    } catch (err) {
-      console.error(
-        "Statement import error:",
-        err
-      );
+        setImportRows(
+          parsedRows
+        );
 
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to process this statement."
-      );
-    } finally {
-      event.target.value = "";
-    }
-  };
+        const readyRows =
+          parsedRows.filter(
+            (
+              row
+            ) =>
+              !row.error &&
+              !row.duplicate
+          ).length;
+
+        setSuccessMessage(
+          `${parsedRows.length} transaction${
+            parsedRows.length ===
+            1
+              ? ""
+              : "s"
+          } found. ${readyRows} ready for review.`
+        );
+      } catch (err) {
+        console.error(
+          "Statement import error:",
+          err
+        );
+
+        const message =
+          err &&
+          typeof err ===
+            "object" &&
+          "message" in err
+            ? String(
+                (
+                  err as {
+                    message: unknown;
+                  }
+                ).message
+              )
+            : null;
+
+        setError(
+          message ||
+            "Unable to process this statement."
+        );
+      } finally {
+        event.target.value =
+          "";
+      }
+    };
 
   const toggleImportRow = (
     rowNumber: number
@@ -1798,9 +2016,10 @@ export default function SpendPage() {
 
   const handleImportTransactions =
     async () => {
-      if (
-        !activeProfile?.id
-      ) {
+      const profile =
+        activeProfile;
+
+      if (!profile?.id) {
         setError(
           "No active profile is available."
         );
@@ -1853,48 +2072,68 @@ export default function SpendPage() {
           await supabase.auth.getUser();
 
         if (!user) {
-          router.push("/login");
+          router.push(
+            "/login"
+          );
           return;
         }
 
         const payload =
           rowsToImport.map(
-            (row) => ({
+            (
+              row
+            ) => ({
               user_id:
                 user.id,
+
               profile_id:
-                activeProfile.id,
+                profile.id,
+
               card_id:
                 selectedImportCardId,
+
               merchant:
                 row.merchant,
+
               merchant_raw:
                 row.merchantRaw,
+
               amount:
                 row.amount,
+
               currency_code:
-                activeProfile.currency_code,
+                profile.currency_code,
+
               category:
                 row.category,
+
               classification_method:
                 row.classificationMethod,
+
               payment_route:
                 row.paymentRoute,
+
               transaction_type:
                 row.transactionType,
+
               source_type:
                 "statement_csv",
+
               source_transaction_id:
                 row.sourceTransactionId,
+
               import_batch_id:
                 importBatchId,
+
               transaction_date:
                 row.transactionDate,
-            }));
+            })
+          );
 
         const {
           data,
-          error: insertError,
+          error:
+            insertError,
         } =
           await supabase
             .from(
@@ -1907,31 +2146,50 @@ export default function SpendPage() {
               "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, merchant_raw, mcc, mcc_description, classification_method, payment_route, transaction_type, source_type, source_transaction_id"
             );
 
-        if (insertError) {
+        if (
+          insertError
+        ) {
           throw insertError;
         }
 
-        await supabase
-          .from(
-            "transaction_import_batches"
-          )
-          .update({
-            transactions_imported:
-              data?.length ??
-              0,
-            status:
-              "completed",
-            completed_at:
-              new Date().toISOString(),
-          })
-          .eq(
-            "id",
-            importBatchId
-          )
-          .eq(
-            "user_id",
-            user.id
-          );
+        if (
+          importBatchId
+        ) {
+          const {
+            error:
+              batchUpdateError,
+          } =
+            await supabase
+              .from(
+                "transaction_import_batches"
+              )
+              .update({
+                transactions_imported:
+                  data?.length ??
+                  0,
+                status:
+                  "completed",
+                completed_at:
+                  new Date().toISOString(),
+              })
+              .eq(
+                "id",
+                importBatchId
+              )
+              .eq(
+                "user_id",
+                user.id
+              );
+
+          if (
+            batchUpdateError
+          ) {
+            console.error(
+              "Import batch update error:",
+              batchUpdateError
+            );
+          }
+        }
 
         setTransactions(
           (current) => [
@@ -2021,7 +2279,8 @@ export default function SpendPage() {
       return new Intl.NumberFormat(
         undefined,
         {
-          style: "currency",
+          style:
+            "currency",
           currency:
             activeProfile?.currency_code ??
             "INR",
@@ -2032,14 +2291,18 @@ export default function SpendPage() {
       return `${
         activeProfile?.currency_code ??
         ""
-      } ${value.toFixed(2)}`;
+      } ${value.toFixed(
+        2
+      )}`;
     }
   };
 
   const getCardName = (
     transaction: SpendTransaction
   ) => {
-    if (!transaction.card_id) {
+    if (
+      !transaction.card_id
+    ) {
       return "No card";
     }
 
@@ -2058,12 +2321,6 @@ export default function SpendPage() {
       ? `${card.name} ···· ${card.card_last_four}`
       : card.name;
   };
-
-  const formatConnectionBadge =
-    (card: Card) =>
-      formatConnectionStatus(
-        card
-      );
 
   if (
     loadingProfiles ||
@@ -2116,7 +2373,6 @@ export default function SpendPage() {
       <CardIQHeader />
 
       <div className="mx-auto max-w-6xl px-5 py-8 lg:px-8 lg:py-10">
-        {/* Header */}
         <section className="mb-8">
           <p className="mb-2 text-sm font-medium text-[var(--muted)]">
             {activeProfile.name} profile
@@ -2189,7 +2445,9 @@ export default function SpendPage() {
                   value={
                     selectedImportCardId
                   }
-                  onChange={(event) =>
+                  onChange={(
+                    event
+                  ) =>
                     setSelectedImportCardId(
                       event.target
                         .value
@@ -2215,7 +2473,9 @@ export default function SpendPage() {
                             card.id
                           }
                         >
-                          {card.name}
+                          {
+                            card.name
+                          }
                           {card.card_last_four
                             ? ` ···· ${card.card_last_four}`
                             : ""}
@@ -2227,7 +2487,9 @@ export default function SpendPage() {
               </div>
 
               <input
-                ref={fileInputRef}
+                ref={
+                  fileInputRef
+                }
                 id="statement-file"
                 type="file"
                 accept=".csv,text/csv"
@@ -2307,7 +2569,7 @@ export default function SpendPage() {
                         </div>
 
                         <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                          {formatConnectionBadge(
+                          {formatConnectionStatus(
                             card
                           )}
                         </span>
@@ -2338,7 +2600,8 @@ export default function SpendPage() {
                 onClick={() =>
                   window.scrollTo({
                     top: 0,
-                    behavior: "smooth",
+                    behavior:
+                      "smooth",
                   })
                 }
                 className="mt-5 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm font-semibold transition hover:bg-slate-100 dark:hover:bg-slate-800"
@@ -2360,9 +2623,8 @@ export default function SpendPage() {
                 </h2>
 
                 <p className="mt-1 text-sm text-[var(--muted)]">
-                  {importFileName
-                    ? importFileName
-                    : "Imported statement"}
+                  {importFileName ||
+                    "Imported statement"}
                   {selectedImportCard
                     ? ` · ${selectedImportCard.name}${
                         selectedImportCard.card_last_four
@@ -2777,7 +3039,7 @@ export default function SpendPage() {
                     )
                   }
                   required
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:ring-slate-700"
                 />
               </div>
 
@@ -3030,8 +3292,13 @@ export default function SpendPage() {
 
         <footer className="mt-12 border-t border-[var(--border)] pt-6 text-xs text-[var(--muted)]">
           <div className="flex flex-col justify-between gap-2 sm:flex-row">
-            <span>CardIQ</span>
-            <span>Make every card spend count.</span>
+            <span>
+              CardIQ
+            </span>
+
+            <span>
+              Make every card spend count.
+            </span>
           </div>
         </footer>
       </div>
