@@ -12,7 +12,9 @@ import {
 } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import CardIQHeader from "@/components/CardIQHeader";
-import { useCardIQProfile } from "@/components/ProfileProvider";
+import {
+  useCardIQProfile,
+} from "@/components/ProfileProvider";
 
 type VariantOption = {
   name: string;
@@ -1017,48 +1019,85 @@ function AddCardForm() {
   } = useCardIQProfile();
 
   const [bank, setBank] = useState("");
-  const [manualBank, setManualBank] = useState("");
+  const [manualBank, setManualBank] =
+    useState("");
 
-  const [cardName, setCardName] = useState("");
-  const [manualCardName, setManualCardName] = useState("");
+  const [cardName, setCardName] =
+    useState("");
+  const [manualCardName, setManualCardName] =
+    useState("");
 
-  const [variant, setVariant] = useState("");
-  const [manualVariant, setManualVariant] = useState("");
+  const [variant, setVariant] =
+    useState("");
+  const [manualVariant, setManualVariant] =
+    useState("");
 
-  const [network, setNetwork] = useState("");
+  const [network, setNetwork] =
+    useState("");
 
-  const [loadingCard, setLoadingCard] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [isLifetimeFree, setIsLifetimeFree] =
+    useState(false);
+
+  const [anniversaryDate, setAnniversaryDate] =
+    useState("");
+
+  const [annualFee, setAnnualFee] =
+    useState("");
+
+  const [
+    annualFeeWaiverThreshold,
+    setAnnualFeeWaiverThreshold,
+  ] = useState("");
+
+  const [loadingCard, setLoadingCard] =
+    useState(true);
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [error, setError] =
+    useState("");
 
   const selectedBank = useMemo(
-    () => BANKS.find((item) => item.name === bank),
+    () =>
+      BANKS.find(
+        (item) => item.name === bank
+      ),
     [bank]
   );
 
-  const availableCards = selectedBank?.cards ?? [];
+  const availableCards =
+    selectedBank?.cards ?? [];
 
   const selectedCard = useMemo(
     () =>
       availableCards.find(
-        (item) => item.name === cardName
+        (item) =>
+          item.name === cardName
       ),
     [availableCards, cardName]
   );
 
-  const availableVariants = selectedCard?.variants ?? [];
+  const availableVariants =
+    selectedCard?.variants ?? [];
 
   const selectedVariant = useMemo(
     () =>
       availableVariants.find(
-        (item) => item.name === variant
+        (item) =>
+          item.name === variant
       ),
     [availableVariants, variant]
   );
 
-  const isManualBank = bank === MANUAL_VALUE;
-  const isManualCard = cardName === MANUAL_VALUE;
-  const isManualVariant = variant === MANUAL_VALUE;
+  const isManualBank =
+    bank === MANUAL_VALUE;
+
+  const isManualCard =
+    cardName === MANUAL_VALUE;
+
+  const isManualVariant =
+    variant === MANUAL_VALUE;
 
   const availableNetworks =
     selectedVariant?.networks ?? [];
@@ -1083,32 +1122,48 @@ function AddCardForm() {
         return;
       }
 
-      // Add mode
+      /*
+       * Add mode
+       */
       if (!editCardId) {
         setLoadingCard(false);
         return;
       }
 
-      const supabase = createClient();
+      const supabase =
+        createClient();
 
       const {
         data: { user },
-      } = await supabase.auth.getUser();
+      } =
+        await supabase.auth.getUser();
 
       if (!user) {
         router.push("/login");
         return;
       }
 
-      const { data: card, error: cardError } =
+      const {
+        data: card,
+        error: cardError,
+      } =
         await supabase
           .from("cards")
           .select(
             "id, name, bank, network, variant, profile_id"
           )
-          .eq("id", editCardId)
-          .eq("user_id", user.id)
-          .eq("profile_id", activeProfile.id)
+          .eq(
+            "id",
+            editCardId
+          )
+          .eq(
+            "user_id",
+            user.id
+          )
+          .eq(
+            "profile_id",
+            activeProfile.id
+          )
           .maybeSingle();
 
       if (cardError || !card) {
@@ -1124,9 +1179,81 @@ function AddCardForm() {
 
       setNetwork(card.network);
 
-      const catalogueBank = BANKS.find(
-        (item) => item.name === card.bank
-      );
+      /*
+       * Load card-specific economics settings.
+       */
+      const {
+        data: cardSettings,
+        error: cardSettingsError,
+      } =
+        await supabase
+          .from(
+            "card_account_settings"
+          )
+          .select(
+            "is_lifetime_free, anniversary_date, annual_fee_override, annual_fee_currency, annual_fee_waiver_threshold"
+          )
+          .eq(
+            "card_id",
+            card.id
+          )
+          .eq(
+            "user_id",
+            user.id
+          )
+          .eq(
+            "profile_id",
+            activeProfile.id
+          )
+          .maybeSingle();
+
+      if (cardSettingsError) {
+        console.error(
+          "Card account settings load error:",
+          cardSettingsError
+        );
+      }
+
+      if (cardSettings) {
+        setIsLifetimeFree(
+          cardSettings.is_lifetime_free
+        );
+
+        setAnniversaryDate(
+          cardSettings.anniversary_date ??
+            ""
+        );
+
+        setAnnualFee(
+          cardSettings.annual_fee_override !=
+            null
+            ? String(
+                cardSettings.annual_fee_override
+              )
+            : ""
+        );
+
+        setAnnualFeeWaiverThreshold(
+          cardSettings.annual_fee_waiver_threshold !=
+            null
+            ? String(
+                cardSettings.annual_fee_waiver_threshold
+              )
+            : ""
+        );
+      } else {
+        setIsLifetimeFree(false);
+        setAnniversaryDate("");
+        setAnnualFee("");
+        setAnnualFeeWaiverThreshold("");
+      }
+
+      const catalogueBank =
+        BANKS.find(
+          (item) =>
+            item.name ===
+            card.bank
+        );
 
       if (!catalogueBank) {
         setBank(MANUAL_VALUE);
@@ -1136,7 +1263,9 @@ function AddCardForm() {
         setManualCardName(card.name);
 
         setVariant(MANUAL_VALUE);
-        setManualVariant(card.variant ?? "");
+        setManualVariant(
+          card.variant ?? ""
+        );
 
         setLoadingCard(false);
         return;
@@ -1146,15 +1275,21 @@ function AddCardForm() {
 
       const catalogueCard =
         catalogueBank.cards.find(
-          (item) => item.name === card.name
+          (item) =>
+            item.name ===
+            card.name
         );
 
       if (!catalogueCard) {
         setCardName(MANUAL_VALUE);
-        setManualCardName(card.name);
+        setManualCardName(
+          card.name
+        );
 
         setVariant(MANUAL_VALUE);
-        setManualVariant(card.variant ?? "");
+        setManualVariant(
+          card.variant ?? ""
+        );
 
         setLoadingCard(false);
         return;
@@ -1164,14 +1299,20 @@ function AddCardForm() {
 
       const catalogueVariant =
         catalogueCard.variants.find(
-          (item) => item.name === card.variant
+          (item) =>
+            item.name ===
+            card.variant
         );
 
       if (!catalogueVariant) {
         setVariant(MANUAL_VALUE);
-        setManualVariant(card.variant ?? "");
+        setManualVariant(
+          card.variant ?? ""
+        );
       } else {
-        setVariant(catalogueVariant.name);
+        setVariant(
+          catalogueVariant.name
+        );
       }
 
       setLoadingCard(false);
@@ -1185,46 +1326,77 @@ function AddCardForm() {
     router,
   ]);
 
-  const handleBankChange = (value: string) => {
+  const handleBankChange = (
+    value: string
+  ) => {
     setBank(value);
     setCardName("");
     setVariant("");
     setNetwork("");
+
     setManualBank(
-      value === MANUAL_VALUE ? manualBank : ""
+      value === MANUAL_VALUE
+        ? manualBank
+        : ""
     );
+
     setManualCardName("");
     setManualVariant("");
   };
 
-  const handleCardChange = (value: string) => {
+  const handleCardChange = (
+    value: string
+  ) => {
     setCardName(value);
     setVariant("");
     setNetwork("");
+
     setManualCardName(
       value === MANUAL_VALUE
         ? manualCardName
         : ""
     );
+
     setManualVariant("");
   };
 
-  const handleVariantChange = (value: string) => {
+  const handleVariantChange = (
+    value: string
+  ) => {
     setVariant(value);
 
-    if (value === MANUAL_VALUE) {
+    if (
+      value === MANUAL_VALUE
+    ) {
       setNetwork("");
       return;
     }
 
-    const option = availableVariants.find(
-      (item) => item.name === value
-    );
+    const option =
+      availableVariants.find(
+        (item) =>
+          item.name === value
+      );
 
-    if (option?.networks.length === 1) {
-      setNetwork(option.networks[0]);
+    if (
+      option?.networks.length === 1
+    ) {
+      setNetwork(
+        option.networks[0]
+      );
     } else {
       setNetwork("");
+    }
+  };
+
+  const handleLifetimeFreeChange = (
+    checked: boolean
+  ) => {
+    setIsLifetimeFree(checked);
+
+    if (checked) {
+      setAnnualFee("");
+      setAnnualFeeWaiverThreshold("");
     }
   };
 
@@ -1232,6 +1404,7 @@ function AddCardForm() {
     event: React.FormEvent<HTMLFormElement>
   ) => {
     event.preventDefault();
+
     setError("");
 
     if (!activeProfile?.id) {
@@ -1241,21 +1414,25 @@ function AddCardForm() {
       return;
     }
 
-    const finalBank = isManualBank
-      ? manualBank.trim()
-      : bank.trim();
+    const finalBank =
+      isManualBank
+        ? manualBank.trim()
+        : bank.trim();
 
-    const finalCardName = isManualCard
-      ? manualCardName.trim()
-      : cardName.trim();
+    const finalCardName =
+      isManualCard
+        ? manualCardName.trim()
+        : cardName.trim();
 
-    const finalVariant = isManualVariant
-      ? manualVariant.trim()
-      : variant.trim();
+    const finalVariant =
+      isManualVariant
+        ? manualVariant.trim()
+        : variant.trim();
 
-    const finalNetwork = hasSingleKnownNetwork
-      ? availableNetworks[0]
-      : network.trim();
+    const finalNetwork =
+      hasSingleKnownNetwork
+        ? availableNetworks[0]
+        : network.trim();
 
     if (!finalBank) {
       setError(
@@ -1285,22 +1462,67 @@ function AddCardForm() {
       return;
     }
 
+    const parsedAnnualFee =
+      annualFee.trim()
+        ? Number(annualFee)
+        : null;
+
+    const parsedWaiverThreshold =
+      annualFeeWaiverThreshold.trim()
+        ? Number(
+            annualFeeWaiverThreshold
+          )
+        : null;
+
+    if (
+      parsedAnnualFee !== null &&
+      (!Number.isFinite(
+        parsedAnnualFee
+      ) ||
+        parsedAnnualFee < 0)
+    ) {
+      setError(
+        "Please enter a valid annual / renewal fee."
+      );
+      return;
+    }
+
+    if (
+      parsedWaiverThreshold !== null &&
+      (!Number.isFinite(
+        parsedWaiverThreshold
+      ) ||
+        parsedWaiverThreshold < 0)
+    ) {
+      setError(
+        "Please enter a valid annual fee-waiver threshold."
+      );
+      return;
+    }
+
     setSaving(true);
 
     try {
-      const supabase = createClient();
+      const supabase =
+        createClient();
 
       const {
         data: { user },
-      } = await supabase.auth.getUser();
+      } =
+        await supabase.auth.getUser();
 
       if (!user) {
         router.push("/login");
         return;
       }
 
-      if (isEditMode && editCardId) {
-        const { error: updateError } =
+      if (
+        isEditMode &&
+        editCardId
+      ) {
+        const {
+          error: updateError,
+        } =
           await supabase
             .from("cards")
             .update({
@@ -1309,8 +1531,14 @@ function AddCardForm() {
               network: finalNetwork,
               variant: finalVariant,
             })
-            .eq("id", editCardId)
-            .eq("user_id", user.id)
+            .eq(
+              "id",
+              editCardId
+            )
+            .eq(
+              "user_id",
+              user.id
+            )
             .eq(
               "profile_id",
               activeProfile.id
@@ -1319,21 +1547,108 @@ function AddCardForm() {
         if (updateError) {
           throw updateError;
         }
+
+        const {
+          error: settingsError,
+        } =
+          await supabase
+            .from(
+              "card_account_settings"
+            )
+            .upsert(
+              {
+                card_id:
+                  editCardId,
+                user_id:
+                  user.id,
+                profile_id:
+                  activeProfile.id,
+                is_lifetime_free:
+                  isLifetimeFree,
+                anniversary_date:
+                  anniversaryDate ||
+                  null,
+                annual_fee_override:
+                  isLifetimeFree
+                    ? null
+                    : parsedAnnualFee,
+                annual_fee_currency:
+                  activeProfile.currency_code,
+                annual_fee_waiver_threshold:
+                  isLifetimeFree
+                    ? null
+                    : parsedWaiverThreshold,
+                updated_at:
+                  new Date().toISOString(),
+              },
+              {
+                onConflict:
+                  "card_id",
+              }
+            );
+
+        if (settingsError) {
+          throw settingsError;
+        }
       } else {
-        const { error: insertError } =
+        const {
+          data: insertedCard,
+          error: insertError,
+        } =
           await supabase
             .from("cards")
             .insert({
-              user_id: user.id,
-              profile_id: activeProfile.id,
+              user_id:
+                user.id,
+              profile_id:
+                activeProfile.id,
               name: finalCardName,
               bank: finalBank,
-              network: finalNetwork,
-              variant: finalVariant,
-            });
+              network:
+                finalNetwork,
+              variant:
+                finalVariant,
+            })
+            .select("id")
+            .single();
 
         if (insertError) {
           throw insertError;
+        }
+
+        const {
+          error: settingsError,
+        } =
+          await supabase
+            .from(
+              "card_account_settings"
+            )
+            .insert({
+              card_id:
+                insertedCard.id,
+              user_id:
+                user.id,
+              profile_id:
+                activeProfile.id,
+              is_lifetime_free:
+                isLifetimeFree,
+              anniversary_date:
+                anniversaryDate ||
+                null,
+              annual_fee_override:
+                isLifetimeFree
+                  ? null
+                  : parsedAnnualFee,
+              annual_fee_currency:
+                activeProfile.currency_code,
+              annual_fee_waiver_threshold:
+                isLifetimeFree
+                  ? null
+                  : parsedWaiverThreshold,
+            });
+
+        if (settingsError) {
+          throw settingsError;
         }
       }
 
@@ -1354,7 +1669,10 @@ function AddCardForm() {
     }
   };
 
-  if (loadingProfiles || loadingCard) {
+  if (
+    loadingProfiles ||
+    loadingCard
+  ) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[var(--background)] text-[var(--foreground)]">
         <p className="text-sm text-[var(--muted)]">
@@ -1382,7 +1700,9 @@ function AddCardForm() {
             <button
               type="button"
               onClick={() =>
-                router.push("/profiles")
+                router.push(
+                  "/profiles"
+                )
               }
               className="mt-5 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
             >
@@ -1395,7 +1715,7 @@ function AddCardForm() {
   }
 
   return (
-    <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
+    <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)] text-[var(--foreground)]">
       <CardIQHeader />
 
       <div className="mx-auto max-w-3xl px-5 py-8 lg:px-8 lg:py-12">
@@ -1404,7 +1724,9 @@ function AddCardForm() {
           <button
             type="button"
             onClick={() =>
-              router.push("/dashboard")
+              router.push(
+                "/dashboard"
+              )
             }
             className="mb-5 text-sm font-medium text-[var(--muted)] transition hover:text-[var(--foreground)]"
           >
@@ -1443,8 +1765,13 @@ function AddCardForm() {
               </p>
 
               <p className="mt-1 text-sm text-[var(--muted)]">
-                {activeProfile.country_code} ·{" "}
-                {activeProfile.currency_code}
+                {
+                  activeProfile.country_code
+                }{" "}
+                ·{" "}
+                {
+                  activeProfile.currency_code
+                }
               </p>
             </div>
 
@@ -1485,14 +1812,18 @@ function AddCardForm() {
                     Select bank / issuer
                   </option>
 
-                  {BANKS.map((item) => (
-                    <option
-                      key={item.name}
-                      value={item.name}
-                    >
-                      {item.name}
-                    </option>
-                  ))}
+                  {BANKS.map(
+                    (item) => (
+                      <option
+                        key={item.name}
+                        value={
+                          item.name
+                        }
+                      >
+                        {item.name}
+                      </option>
+                    )
+                  )}
 
                   <option value={MANUAL_VALUE}>
                     Not listed — add manually
@@ -1503,10 +1834,13 @@ function AddCardForm() {
                   <input
                     id="manual-bank"
                     type="text"
-                    value={manualBank}
+                    value={
+                      manualBank
+                    }
                     onChange={(event) =>
                       setManualBank(
-                        event.target.value
+                        event.target
+                          .value
                       )
                     }
                     placeholder="Enter bank / issuer"
@@ -1545,14 +1879,18 @@ function AddCardForm() {
               {!isManualCard ? (
                 <select
                   id="cardName"
-                  value={cardName}
+                  value={
+                    cardName
+                  }
                   onChange={(event) =>
                     handleCardChange(
-                      event.target.value
+                      event.target
+                        .value
                     )
                   }
                   disabled={
-                    !bank || isManualBank
+                    !bank ||
+                    isManualBank
                   }
                   className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:focus:border-slate-500 dark:focus:ring-slate-700 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
                   required
@@ -1565,30 +1903,42 @@ function AddCardForm() {
                         : "Select a bank first"}
                   </option>
 
-                  {availableCards.map((card) => (
-                    <option
-                      key={card.name}
-                      value={card.name}
-                    >
-                      {card.name}
-                    </option>
-                  ))}
-
-                  {bank && !isManualBank && (
-                    <option value={MANUAL_VALUE}>
-                      Not listed — add manually
-                    </option>
+                  {availableCards.map(
+                    (card) => (
+                      <option
+                        key={
+                          card.name
+                        }
+                        value={
+                          card.name
+                        }
+                      >
+                        {
+                          card.name
+                        }
+                      </option>
+                    )
                   )}
+
+                  {bank &&
+                    !isManualBank && (
+                      <option value={MANUAL_VALUE}>
+                        Not listed — add manually
+                      </option>
+                    )}
                 </select>
               ) : (
                 <>
                   <input
                     id="manual-card"
                     type="text"
-                    value={manualCardName}
+                    value={
+                      manualCardName
+                    }
                     onChange={(event) =>
                       setManualCardName(
-                        event.target.value
+                        event.target
+                          .value
                       )
                     }
                     placeholder="Enter card name"
@@ -1625,14 +1975,18 @@ function AddCardForm() {
               {!isManualVariant ? (
                 <select
                   id="variant"
-                  value={variant}
+                  value={
+                    variant
+                  }
                   onChange={(event) =>
                     handleVariantChange(
-                      event.target.value
+                      event.target
+                        .value
                     )
                   }
                   disabled={
-                    !cardName || isManualCard
+                    !cardName ||
+                    isManualCard
                   }
                   className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:focus:border-slate-500 dark:focus:ring-slate-700 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
                   required
@@ -1648,29 +2002,39 @@ function AddCardForm() {
                   {availableVariants.map(
                     (item) => (
                       <option
-                        key={item.name}
-                        value={item.name}
+                        key={
+                          item.name
+                        }
+                        value={
+                          item.name
+                        }
                       >
-                        {item.name}
+                        {
+                          item.name
+                        }
                       </option>
                     )
                   )}
 
-                  {cardName && !isManualCard && (
-                    <option value={MANUAL_VALUE}>
-                      Not listed — add manually
-                    </option>
-                  )}
+                  {cardName &&
+                    !isManualCard && (
+                      <option value={MANUAL_VALUE}>
+                        Not listed — add manually
+                      </option>
+                    )}
                 </select>
               ) : (
                 <>
                   <input
                     id="manual-variant"
                     type="text"
-                    value={manualVariant}
+                    value={
+                      manualVariant
+                    }
                     onChange={(event) =>
                       setManualVariant(
-                        event.target.value
+                        event.target
+                          .value
                       )
                     }
                     placeholder="Enter card variant"
@@ -1701,7 +2065,9 @@ function AddCardForm() {
                 </label>
 
                 <div className="rounded-xl border border-[var(--border)] bg-[var(--card-muted)] px-4 py-3 text-sm font-medium text-[var(--foreground)]">
-                  {availableNetworks[0]}
+                  {
+                    availableNetworks[0]
+                  }
                 </div>
 
                 <p className="mt-2 text-xs text-[var(--muted)]">
@@ -1720,28 +2086,40 @@ function AddCardForm() {
 
                 <select
                   id="network"
-                  value={network}
+                  value={
+                    network
+                  }
                   onChange={(event) =>
-                    setNetwork(event.target.value)
+                    setNetwork(
+                      event.target
+                        .value
+                    )
                   }
                   disabled={
-                    !variant && !isManualVariant
+                    !variant &&
+                    !isManualVariant
                   }
                   className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:focus:border-slate-500 dark:focus:ring-slate-700 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
                   required
                 >
                   <option value="">
-                    {variant || isManualVariant
+                    {variant ||
+                    isManualVariant
                       ? "Select network"
                       : "Select a card variant first"}
                   </option>
 
-                  {availableNetworks.length > 0
+                  {availableNetworks.length >
+                  0
                     ? availableNetworks.map(
                         (item) => (
                           <option
-                            key={item}
-                            value={item}
+                            key={
+                              item
+                            }
+                            value={
+                              item
+                            }
                           >
                             {item}
                           </option>
@@ -1750,8 +2128,12 @@ function AddCardForm() {
                     : FALLBACK_NETWORKS.map(
                         (item) => (
                           <option
-                            key={item}
-                            value={item}
+                            key={
+                              item
+                            }
+                            value={
+                              item
+                            }
                           >
                             {item}
                           </option>
@@ -1769,6 +2151,154 @@ function AddCardForm() {
               </div>
             )}
 
+            {/* Card Economics */}
+            <div className="border-t border-[var(--border)] pt-6">
+              <div className="mb-5">
+                <p className="text-sm font-semibold">
+                  Card economics
+                </p>
+
+                <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
+                  Add the details of your specific card so CardIQ can track
+                  renewal fees, fee-waiver progress and annual value.
+                </p>
+              </div>
+
+              {/* Lifetime Free */}
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--card-muted)] p-4">
+                <label className="flex cursor-pointer items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={
+                      isLifetimeFree
+                    }
+                    onChange={(event) =>
+                      handleLifetimeFreeChange(
+                        event.target
+                          .checked
+                      )
+                    }
+                    className="mt-1 h-4 w-4 rounded border-slate-300"
+                  />
+
+                  <span>
+                    <span className="block text-sm font-semibold">
+                      Lifetime Free (LTF)
+                    </span>
+
+                    <span className="mt-1 block text-xs leading-5 text-[var(--muted)]">
+                      Mark this if your specific card has no joining or renewal
+                      fee.
+                    </span>
+                  </span>
+                </label>
+              </div>
+
+              <div className="mt-5 grid gap-5 md:grid-cols-2">
+                {/* Anniversary */}
+                <div>
+                  <label
+                    htmlFor="anniversary-date"
+                    className="mb-2 block text-sm font-semibold"
+                  >
+                    Card anniversary date
+                  </label>
+
+                  <input
+                    id="anniversary-date"
+                    type="date"
+                    value={
+                      anniversaryDate
+                    }
+                    onChange={(event) =>
+                      setAnniversaryDate(
+                        event.target
+                          .value
+                      )
+                    }
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
+                  />
+
+                  <p className="mt-2 text-xs text-[var(--muted)]">
+                    Used to calculate spending in the card&apos;s anniversary year.
+                  </p>
+                </div>
+
+                {/* Annual fee */}
+                <div>
+                  <label
+                    htmlFor="annual-fee"
+                    className="mb-2 block text-sm font-semibold"
+                  >
+                    Annual / renewal fee
+                  </label>
+
+                  <input
+                    id="annual-fee"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={
+                      annualFee
+                    }
+                    onChange={(event) =>
+                      setAnnualFee(
+                        event.target
+                          .value
+                      )
+                    }
+                    disabled={
+                      isLifetimeFree
+                    }
+                    placeholder={`e.g. 1000 ${activeProfile.currency_code}`}
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:focus:border-slate-500 dark:focus:ring-slate-700 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
+                  />
+
+                  <p className="mt-2 text-xs text-[var(--muted)]">
+                    Enter the fee applicable to your specific card.
+                  </p>
+                </div>
+
+                {/* Waiver threshold */}
+                <div className="md:col-span-2">
+                  <label
+                    htmlFor="annual-fee-waiver-threshold"
+                    className="mb-2 block text-sm font-semibold"
+                  >
+                    Annual spend required for fee waiver
+                  </label>
+
+                  <input
+                    id="annual-fee-waiver-threshold"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={
+                      annualFeeWaiverThreshold
+                    }
+                    onChange={(event) =>
+                      setAnnualFeeWaiverThreshold(
+                        event.target
+                          .value
+                      )
+                    }
+                    disabled={
+                      isLifetimeFree
+                    }
+                    placeholder={`e.g. 100000 ${activeProfile.currency_code}`}
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:focus:border-slate-500 dark:focus:ring-slate-700 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
+                  />
+
+                  <p className="mt-2 text-xs text-[var(--muted)]">
+                    CardIQ will use this threshold to track your progress toward
+                    avoiding the next renewal fee.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {/* Error */}
             {error && (
               <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
@@ -1781,7 +2311,9 @@ function AddCardForm() {
               <button
                 type="button"
                 onClick={() =>
-                  router.push("/dashboard")
+                  router.push(
+                    "/dashboard"
+                  )
                 }
                 className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-5 py-3 text-sm font-semibold text-[var(--foreground)] transition hover:bg-slate-100 dark:hover:bg-slate-800"
               >
@@ -1790,7 +2322,9 @@ function AddCardForm() {
 
               <button
                 type="submit"
-                disabled={saving}
+                disabled={
+                  saving
+                }
                 className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
               >
                 {saving
