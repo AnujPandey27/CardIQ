@@ -42,21 +42,85 @@ type SpendTransaction = {
   transaction_type?: string | null;
   source_type?: string | null;
   source_transaction_id?: string | null;
+
+  emi_status?: string | null;
+  emi_principal?: number | null;
+  emi_interest_rate?: number | null;
+  emi_interest?: number | null;
+  emi_processing_fee?: number | null;
+  emi_tax?: number | null;
+  gst_on_processing_fee?: number | null;
+  gst_on_interest?: number | null;
+  emi_other_fees?: number | null;
+  emi_number?: number | null;
+  total_emis?: number | null;
+  emi_total_payable?: number | null;
+  emi_start_date?: string | null;
+  emi_end_date?: string | null;
+  original_transaction_amount?: number | null;
+  total_transaction_cost?: number | null;
+
+  reward_adjustment_amount?: number | null;
+  fee_waiver_adjustment_amount?: number | null;
+  original_transaction_id?: string | null;
+  transaction_fingerprint?: string | null;
 };
 
 type ImportRow = {
   rowNumber: number;
+
   merchant: string;
   merchantRaw: string;
+
   amount: number;
+  originalTransactionAmount: number;
+
   transactionDate: string;
+
   category: string;
+
   cardId: string;
+
   sourceTransactionId: string | null;
-  transactionType: string;
+
+  transactionType:
+    | "purchase"
+    | "refund"
+    | "reversal"
+    | "fee"
+    | "payment"
+    | "cash_withdrawal"
+    | "other";
+
   paymentRoute: string | null;
+
+  mcc: number | null;
+
+  mccDescription: string | null;
+
   classificationMethod: string;
+
+  emiStatus:
+    | "regular"
+    | "emi"
+    | "no_cost_emi";
+
+  emiPrincipal: number | null;
+  emiInterestRate: number | null;
+  emiInterest: number | null;
+  emiProcessingFee: number | null;
+  gstOnProcessingFee: number | null;
+  gstOnInterest: number | null;
+  emiOtherFees: number | null;
+  emiNumber: number | null;
+  totalEmis: number | null;
+  emiTotalPayable: number | null;
+  emiStartDate: string | null;
+  emiEndDate: string | null;
+  totalTransactionCost: number | null;
+
   rawValues: string[];
+
   duplicate: boolean;
   selected: boolean;
   error: string | null;
@@ -72,8 +136,73 @@ const CATEGORIES = [
   "Bills",
   "Entertainment",
   "Online",
+  "Insurance",
+  "Education",
+  "Medical",
+  "Taxes",
+  "Government",
+  "Rent",
   "Other",
 ];
+
+const PAYMENT_ROUTES = [
+  "Merchant website",
+  "Merchant app",
+  "Paytm",
+  "PhonePe",
+  "Google Pay",
+  "Amazon Pay",
+  "Bank app",
+  "UPI",
+  "POS / physical store",
+  "Other",
+];
+
+const EMI_STATUSES = [
+  {
+    value: "regular",
+    label: "Regular purchase",
+  },
+  {
+    value: "emi",
+    label: "EMI",
+  },
+  {
+    value: "no_cost_emi",
+    label: "No-Cost EMI",
+  },
+] as const;
+
+const TRANSACTION_TYPES = [
+  {
+    value: "purchase",
+    label: "Purchase",
+  },
+  {
+    value: "refund",
+    label: "Refund",
+  },
+  {
+    value: "reversal",
+    label: "Reversal",
+  },
+  {
+    value: "fee",
+    label: "Fee",
+  },
+  {
+    value: "payment",
+    label: "Card payment",
+  },
+  {
+    value: "cash_withdrawal",
+    label: "Cash withdrawal",
+  },
+  {
+    value: "other",
+    label: "Other",
+  },
+] as const;
 
 const CONNECTION_LABELS: Record<
   string,
@@ -94,10 +223,22 @@ function normalizeHeader(
     .replace(/[\s_-]+/g, "");
 }
 
+function normalizeMerchant(
+  value: string
+): string {
+  return value
+    .toLowerCase()
+    .replace(
+      /[^a-z0-9]+/g,
+      ""
+    );
+}
+
 function parseCsvLine(
   line: string
 ): string[] {
   const values: string[] = [];
+
   let current = "";
   let insideQuotes = false;
 
@@ -130,7 +271,6 @@ function parseCsvLine(
       values.push(
         current.trim()
       );
-
       current = "";
       continue;
     }
@@ -150,10 +290,17 @@ function parseCsv(
 ): string[][] {
   const cleaned = content
     .replace(/^\uFEFF/, "")
-    .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "\n");
+    .replace(
+      /\r\n/g,
+      "\n"
+    )
+    .replace(
+      /\r/g,
+      "\n"
+    );
 
   const rows: string[][] = [];
+
   let current = "";
   let insideQuotes = false;
 
@@ -244,10 +391,24 @@ function parseAmount(
     return null;
   }
 
-  const cleaned = raw
+  const value = raw.trim();
+
+  if (!value) {
+    return null;
+  }
+
+  const isParenthesizedNegative =
+    value.startsWith("(") &&
+    value.endsWith(")");
+
+  const cleaned = value
     .replace(/,/g, "")
     .replace(
-      /[₹$€£\s]/g,
+      /[₹$€£¥\s]/g,
+      ""
+    )
+    .replace(
+      /[()]/g,
       ""
     )
     .trim();
@@ -256,19 +417,8 @@ function parseAmount(
     return null;
   }
 
-  const negative =
-    cleaned.startsWith("(") &&
-    cleaned.endsWith(")");
-
-  const withoutParens =
-    cleaned
-      .replace(/[()]/g, "")
-      .trim();
-
   const numeric =
-    Number(
-      withoutParens
-    );
+    Number(cleaned);
 
   if (
     !Number.isFinite(
@@ -278,9 +428,45 @@ function parseAmount(
     return null;
   }
 
-  return negative
+  return isParenthesizedNegative
     ? -Math.abs(numeric)
     : numeric;
+}
+
+function parseOptionalNumber(
+  raw: string
+): number | null {
+  if (!raw?.trim()) {
+    return null;
+  }
+
+  return parseAmount(raw);
+}
+
+function parseInteger(
+  raw: string
+): number | null {
+  if (!raw?.trim()) {
+    return null;
+  }
+
+  const numeric =
+    Number(
+      raw.replace(
+        /[^\d.-]/g,
+        ""
+      )
+    );
+
+  if (
+    !Number.isInteger(
+      numeric
+    )
+  ) {
+    return null;
+  }
+
+  return numeric;
 }
 
 function parseDate(
@@ -321,12 +507,7 @@ function parseDate(
       day >= 1 &&
       day <= 31
     ) {
-      return `${String(
-        year
-      ).padStart(
-        4,
-        "0"
-      )}-${String(
+      return `${year}-${String(
         month
       ).padStart(
         2,
@@ -406,6 +587,118 @@ function parseDate(
   )}`;
 }
 
+function parseBoolean(
+  value: string
+): boolean {
+  return /^(yes|true|y|1)$/i.test(
+    value.trim()
+  );
+}
+
+function normalizeEmiStatus(
+  value: string
+):
+  | "regular"
+  | "emi"
+  | "no_cost_emi" {
+  const normalized =
+    normalizeHeader(
+      value
+    );
+
+  if (
+    normalized.includes(
+      "nocostemi"
+    ) ||
+    normalized.includes(
+      "nocost"
+    )
+  ) {
+    return "no_cost_emi";
+  }
+
+  if (
+    normalized === "emi" ||
+    normalized.includes(
+      "installment"
+    ) ||
+    normalized.includes(
+      "instalment"
+    )
+  ) {
+    return "emi";
+  }
+
+  return "regular";
+}
+
+function normalizeTransactionType(
+  value: string
+):
+  | "purchase"
+  | "refund"
+  | "reversal"
+  | "fee"
+  | "payment"
+  | "cash_withdrawal"
+  | "other" {
+  const normalized =
+    normalizeHeader(
+      value
+    );
+
+  if (
+    normalized.includes(
+      "refund"
+    )
+  ) {
+    return "refund";
+  }
+
+  if (
+    normalized.includes(
+      "reversal"
+    )
+  ) {
+    return "reversal";
+  }
+
+  if (
+    normalized.includes(
+      "fee"
+    ) ||
+    normalized.includes(
+      "charge"
+    )
+  ) {
+    return "fee";
+  }
+
+  if (
+    normalized.includes(
+      "payment"
+    ) ||
+    normalized.includes(
+      "repayment"
+    )
+  ) {
+    return "payment";
+  }
+
+  if (
+    normalized.includes(
+      "cash"
+    ) ||
+    normalized.includes(
+      "atm"
+    )
+  ) {
+    return "cash_withdrawal";
+  }
+
+  return "purchase";
+}
+
 function inferCategory(
   merchant: string
 ): {
@@ -457,7 +750,8 @@ function inferCategory(
     )
   ) {
     return {
-      category: "Utilities",
+      category:
+        "Utilities",
       classificationMethod:
         "merchant",
     };
@@ -483,6 +777,19 @@ function inferCategory(
   ) {
     return {
       category: "Travel",
+      classificationMethod:
+        "merchant",
+    };
+  }
+
+  if (
+    /insurance|lic |policy/.test(
+      value
+    )
+  ) {
+    return {
+      category:
+        "Insurance",
       classificationMethod:
         "merchant",
     };
@@ -543,6 +850,184 @@ function formatConnectionStatus(
   );
 }
 
+function buildFingerprintInput(
+  values: {
+    cardId: string | null;
+    transactionDate: string;
+    amount: number;
+    merchant: string;
+    transactionType: string;
+  }
+): string {
+  return [
+    values.cardId ?? "none",
+    values.transactionDate,
+    Math.abs(
+      values.amount
+    ).toFixed(2),
+    normalizeMerchant(
+      values.merchant
+    ),
+    values.transactionType,
+  ].join("|");
+}
+
+async function createTransactionFingerprint(
+  values: {
+    cardId: string | null;
+    transactionDate: string;
+    amount: number;
+    merchant: string;
+    transactionType: string;
+  }
+): Promise<string> {
+  const input =
+    buildFingerprintInput(
+      values
+    );
+
+  if (
+    typeof window !==
+    "undefined" &&
+    window.crypto?.subtle
+  ) {
+    const encoded =
+      new TextEncoder().encode(
+        input
+      );
+
+    const digest =
+      await window.crypto.subtle.digest(
+        "SHA-256",
+        encoded
+      );
+
+    return Array.from(
+      new Uint8Array(
+        digest
+      )
+    )
+      .map(
+        (byte) =>
+          byte
+            .toString(16)
+            .padStart(
+              2,
+              "0"
+            )
+      )
+      .join("");
+  }
+
+  return input;
+}
+
+function isPotentialDuplicate(
+  existing: SpendTransaction,
+  candidate: {
+    cardId: string | null;
+    merchant: string;
+    amount: number;
+    transactionDate: string;
+    transactionType: string;
+  }
+): boolean {
+  if (
+    existing.card_id !==
+    candidate.cardId
+  ) {
+    return false;
+  }
+
+  if (
+    existing.transaction_type !==
+    candidate.transactionType
+  ) {
+    return false;
+  }
+
+  const existingAmount =
+    Math.abs(
+      Number(
+        existing.amount
+      )
+    );
+
+  const candidateAmount =
+    Math.abs(
+      Number(
+        candidate.amount
+      )
+    );
+
+  if (
+    Math.abs(
+      existingAmount -
+        candidateAmount
+    ) > 0.01
+  ) {
+    return false;
+  }
+
+  const existingDate =
+    new Date(
+      existing.transaction_date
+    );
+
+  const candidateDate =
+    new Date(
+      candidate.transactionDate
+    );
+
+  const dayDifference =
+    Math.abs(
+      existingDate.getTime() -
+        candidateDate.getTime()
+    ) /
+    (1000 * 60 * 60 * 24);
+
+  if (
+    dayDifference > 2
+  ) {
+    return false;
+  }
+
+  const existingMerchant =
+    normalizeMerchant(
+      existing.merchant
+    );
+
+  const candidateMerchant =
+    normalizeMerchant(
+      candidate.merchant
+    );
+
+  if (
+    existingMerchant ===
+    candidateMerchant
+  ) {
+    return true;
+  }
+
+  if (
+    existingMerchant.length >=
+      5 &&
+    candidateMerchant.length >=
+      5
+  ) {
+    return (
+      existingMerchant.includes(
+        candidateMerchant
+      ) ||
+      candidateMerchant.includes(
+        existingMerchant
+      )
+    );
+  }
+
+  return false;
+}
+
 export default function SpendPage() {
   const router =
     useRouter();
@@ -550,14 +1035,13 @@ export default function SpendPage() {
   const {
     activeProfile,
     loadingProfiles,
-  } = useCardIQProfile();
+  } =
+    useCardIQProfile();
 
   const [
     cards,
     setCards,
-  ] = useState<Card[]>(
-    []
-  );
+  ] = useState<Card[]>([]);
 
   const [
     transactions,
@@ -650,6 +1134,103 @@ export default function SpendPage() {
   ] = useState("");
 
   const [
+    mcc,
+    setMcc,
+  ] = useState("");
+
+  const [
+    mccDescription,
+    setMccDescription,
+  ] = useState("");
+
+  const [
+    paymentRoute,
+    setPaymentRoute,
+  ] = useState("");
+
+  const [
+    transactionType,
+    setTransactionType,
+  ] = useState<
+    (typeof TRANSACTION_TYPES)[number]["value"]
+  >("purchase");
+
+  const [
+    originalTransactionId,
+    setOriginalTransactionId,
+  ] = useState("");
+
+  const [
+    emiStatus,
+    setEmiStatus,
+  ] = useState<
+    (typeof EMI_STATUSES)[number]["value"]
+  >("regular");
+
+  const [
+    emiPrincipal,
+    setEmiPrincipal,
+  ] = useState("");
+
+  const [
+    emiInterestRate,
+    setEmiInterestRate,
+  ] = useState("");
+
+  const [
+    emiInterest,
+    setEmiInterest,
+  ] = useState("");
+
+  const [
+    emiProcessingFee,
+    setEmiProcessingFee,
+  ] = useState("");
+
+  const [
+    gstOnProcessingFee,
+    setGstOnProcessingFee,
+  ] = useState("");
+
+  const [
+    gstOnInterest,
+    setGstOnInterest,
+  ] = useState("");
+
+  const [
+    emiOtherFees,
+    setEmiOtherFees,
+  ] = useState("");
+
+  const [
+    emiNumber,
+    setEmiNumber,
+  ] = useState("");
+
+  const [
+    totalEmis,
+    setTotalEmis,
+  ] = useState("");
+
+  const [
+    emiTotalPayable,
+    setEmiTotalPayable,
+  ] = useState("");
+
+  const [
+    emiStartDate,
+    setEmiStartDate,
+  ] = useState("");
+
+  const [
+    emiEndDate,
+    setEmiEndDate,
+  ] = useState("");
+
+  /*
+   * Import state
+   */
+  const [
     selectedImportCardId,
     setSelectedImportCardId,
   ] = useState("");
@@ -683,6 +1264,9 @@ export default function SpendPage() {
       null
     );
 
+  const profile =
+    activeProfile;
+
   const selectedCard =
     useMemo(
       () =>
@@ -708,6 +1292,19 @@ export default function SpendPage() {
       ]
     );
 
+  const originalTransactionOptions =
+    useMemo(
+      () =>
+        transactions.filter(
+          (transaction) =>
+            transaction.transaction_type ===
+              "purchase" ||
+            transaction.transaction_type ===
+              "emi"
+        ),
+      [transactions]
+    );
+
   const totalSpend =
     useMemo(
       () =>
@@ -715,11 +1312,44 @@ export default function SpendPage() {
           (
             total,
             transaction
-          ) =>
-            total +
-            Number(
-              transaction.amount
-            ),
+          ) => {
+            const value =
+              Math.abs(
+                Number(
+                  transaction.amount
+                )
+              );
+
+            const type =
+              transaction.transaction_type ??
+              "purchase";
+
+            if (
+              type ===
+                "refund" ||
+              type ===
+                "reversal"
+            ) {
+              return (
+                total - value
+              );
+            }
+
+            if (
+              type ===
+                "fee" ||
+              type ===
+                "payment" ||
+              type ===
+                "cash_withdrawal"
+            ) {
+              return total;
+            }
+
+            return (
+              total + value
+            );
+          },
           0
         ),
       [transactions]
@@ -757,7 +1387,7 @@ export default function SpendPage() {
         }
 
         if (
-          !activeProfile?.id
+          !profile?.id
         ) {
           setCards([]);
           setTransactions(
@@ -805,7 +1435,9 @@ export default function SpendPage() {
         ] =
           await Promise.all([
             supabase
-              .from("cards")
+              .from(
+                "cards"
+              )
               .select(
                 "id, name, bank, network, variant, card_last_four, connection_type, connection_status, last_synced_at"
               )
@@ -815,7 +1447,7 @@ export default function SpendPage() {
               )
               .eq(
                 "profile_id",
-                activeProfile.id
+                profile.id
               )
               .order(
                 "created_at",
@@ -830,7 +1462,7 @@ export default function SpendPage() {
                 "spend_transactions"
               )
               .select(
-                "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, merchant_raw, mcc, mcc_description, classification_method, payment_route, transaction_type, source_type, source_transaction_id"
+                "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, merchant_raw, mcc, mcc_description, classification_method, payment_route, transaction_type, source_type, source_transaction_id, emi_status, emi_principal, emi_interest_rate, emi_interest, emi_processing_fee, emi_tax, gst_on_processing_fee, gst_on_interest, emi_other_fees, emi_number, total_emis, emi_total_payable, emi_start_date, emi_end_date, original_transaction_amount, total_transaction_cost, reward_adjustment_amount, fee_waiver_adjustment_amount, original_transaction_id, transaction_fingerprint"
               )
               .eq(
                 "user_id",
@@ -838,7 +1470,7 @@ export default function SpendPage() {
               )
               .eq(
                 "profile_id",
-                activeProfile.id
+                profile.id
               )
               .order(
                 "transaction_date",
@@ -937,7 +1569,7 @@ export default function SpendPage() {
 
     loadData();
   }, [
-    activeProfile?.id,
+    profile?.id,
     loadingProfiles,
     router,
   ]);
@@ -970,10 +1602,72 @@ export default function SpendPage() {
       );
 
       setNotes("");
+      setMcc("");
+      setMccDescription("");
+      setPaymentRoute("");
+      setTransactionType(
+        "purchase"
+      );
+      setOriginalTransactionId(
+        ""
+      );
+
+      setEmiStatus(
+        "regular"
+      );
+      setEmiPrincipal("");
+      setEmiInterestRate("");
+      setEmiInterest("");
+      setEmiProcessingFee("");
+      setGstOnProcessingFee("");
+      setGstOnInterest("");
+      setEmiOtherFees("");
+      setEmiNumber("");
+      setTotalEmis("");
+      setEmiTotalPayable("");
+      setEmiStartDate("");
+      setEmiEndDate("");
+
       setEditingTransactionId(
         null
       );
       setOpenMenuId(null);
+    };
+
+  const resetEmiFields =
+    () => {
+      setEmiPrincipal("");
+      setEmiInterestRate("");
+      setEmiInterest("");
+      setEmiProcessingFee("");
+      setGstOnProcessingFee("");
+      setGstOnInterest("");
+      setEmiOtherFees("");
+      setEmiNumber("");
+      setTotalEmis("");
+      setEmiTotalPayable("");
+      setEmiStartDate("");
+      setEmiEndDate("");
+    };
+
+  const handleTransactionTypeChange =
+    (
+      value: string
+    ) => {
+      setTransactionType(
+        value as (typeof TRANSACTION_TYPES)[number]["value"]
+      );
+
+      if (
+        value !==
+          "refund" &&
+        value !==
+          "reversal"
+      ) {
+        setOriginalTransactionId(
+          ""
+        );
+      }
     };
 
   const handleSubmit =
@@ -984,14 +1678,6 @@ export default function SpendPage() {
 
       setError("");
       setSuccessMessage("");
-
-      /*
-       * Create a local non-null reference.
-       * This fixes the TypeScript issue that occurred
-       * during the production build.
-       */
-      const profile =
-        activeProfile;
 
       if (!profile?.id) {
         setError(
@@ -1005,6 +1691,11 @@ export default function SpendPage() {
 
       const numericAmount =
         Number(amount);
+
+      const numericMcc =
+        mcc.trim()
+          ? Number(mcc)
+          : null;
 
       if (!trimmedMerchant) {
         setError(
@@ -1021,7 +1712,24 @@ export default function SpendPage() {
           0
       ) {
         setError(
-          "Please enter a valid purchase amount."
+          "Please enter a valid transaction amount."
+        );
+        return;
+      }
+
+      if (
+        numericMcc !==
+          null &&
+        (!Number.isInteger(
+          numericMcc
+        ) ||
+          numericMcc <
+            1 ||
+          numericMcc >
+            9999)
+      ) {
+        setError(
+          "MCC must be a valid numeric code."
         );
         return;
       }
@@ -1037,7 +1745,222 @@ export default function SpendPage() {
         !transactionDate
       ) {
         setError(
-          "Please select a purchase date."
+          "Please select a transaction date."
+        );
+        return;
+      }
+
+      if (
+        (transactionType ===
+          "refund" ||
+          transactionType ===
+            "reversal") &&
+        !originalTransactionId
+      ) {
+        setError(
+          "Please select the original transaction for this refund or reversal."
+        );
+        return;
+      }
+
+      if (
+        emiStatus !==
+          "regular" &&
+        transactionType !==
+          "purchase"
+      ) {
+        setError(
+          "EMI details can only be attached to a purchase."
+        );
+        return;
+      }
+
+      const numericEmiPrincipal =
+        emiPrincipal.trim()
+          ? Number(
+              emiPrincipal
+            )
+          : null;
+
+      const numericInterestRate =
+        emiInterestRate.trim()
+          ? Number(
+              emiInterestRate
+            )
+          : null;
+
+      const numericInterest =
+        emiInterest.trim()
+          ? Number(
+              emiInterest
+            )
+          : null;
+
+      const numericProcessingFee =
+        emiProcessingFee.trim()
+          ? Number(
+              emiProcessingFee
+            )
+          : null;
+
+      const numericGstProcessingFee =
+        gstOnProcessingFee.trim()
+          ? Number(
+              gstOnProcessingFee
+            )
+          : null;
+
+      const numericGstInterest =
+        gstOnInterest.trim()
+          ? Number(
+              gstOnInterest
+            )
+          : null;
+
+      const numericOtherFees =
+        emiOtherFees.trim()
+          ? Number(
+              emiOtherFees
+            )
+          : null;
+
+      const numericEmiNumber =
+        emiNumber.trim()
+          ? Number(
+              emiNumber
+            )
+          : null;
+
+      const numericTotalEmis =
+        totalEmis.trim()
+          ? Number(
+              totalEmis
+            )
+          : null;
+
+      const numericTotalPayable =
+        emiTotalPayable.trim()
+          ? Number(
+              emiTotalPayable
+            )
+          : null;
+
+      const numericTotalCost =
+        emiStatus ===
+          "regular"
+          ? numericAmount
+          : numericTotalPayable ??
+            (
+              numericEmiPrincipal ??
+              numericAmount
+            ) +
+              (
+                numericInterest ??
+                0
+              ) +
+              (
+                numericProcessingFee ??
+                0
+              ) +
+              (
+                numericGstProcessingFee ??
+                0
+              ) +
+              (
+                numericGstInterest ??
+                0
+              ) +
+              (
+                numericOtherFees ??
+                0
+              );
+
+      const emiNumericValues = [
+        numericEmiPrincipal,
+        numericInterestRate,
+        numericInterest,
+        numericProcessingFee,
+        numericGstProcessingFee,
+        numericGstInterest,
+        numericOtherFees,
+        numericEmiNumber,
+        numericTotalEmis,
+        numericTotalPayable,
+      ];
+
+      if (
+        emiStatus !==
+          "regular" &&
+        emiNumericValues.some(
+          (
+            value
+          ) =>
+            value !==
+              null &&
+            (!Number.isFinite(
+              value
+            ) ||
+              value < 0)
+        )
+      ) {
+        setError(
+          "Please enter valid EMI amounts and values."
+        );
+        return;
+      }
+
+      if (
+        numericInterestRate !==
+          null &&
+        numericInterestRate >
+          100
+      ) {
+        setError(
+          "Interest rate cannot exceed 100%."
+        );
+        return;
+      }
+
+      if (
+        numericEmiNumber !==
+          null &&
+        (!Number.isInteger(
+          numericEmiNumber
+        ) ||
+          numericEmiNumber <
+            1)
+      ) {
+        setError(
+          "EMI number must be a positive whole number."
+        );
+        return;
+      }
+
+      if (
+        numericTotalEmis !==
+          null &&
+        (!Number.isInteger(
+          numericTotalEmis
+        ) ||
+          numericTotalEmis <
+            1)
+      ) {
+        setError(
+          "Total EMIs must be a positive whole number."
+        );
+        return;
+      }
+
+      if (
+        numericEmiNumber !==
+          null &&
+        numericTotalEmis !==
+          null &&
+        numericEmiNumber >
+          numericTotalEmis
+      ) {
+        setError(
+          "EMI number cannot be greater than total EMIs."
         );
         return;
       }
@@ -1062,6 +1985,323 @@ export default function SpendPage() {
           return;
         }
 
+        const fingerprint =
+          await createTransactionFingerprint({
+            cardId:
+              selectedCard?.id ??
+              null,
+            transactionDate,
+            amount:
+              numericAmount,
+            merchant:
+              trimmedMerchant,
+            transactionType,
+          });
+
+        /*
+         * Exact fingerprint check.
+         */
+        const {
+          data: fingerprintMatches,
+          error:
+            fingerprintError,
+        } =
+          await supabase
+            .from(
+              "spend_transactions"
+            )
+            .select(
+              "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, transaction_type"
+            )
+            .eq(
+              "user_id",
+              user.id
+            )
+            .eq(
+              "profile_id",
+              profile.id
+            )
+            .eq(
+              "transaction_fingerprint",
+              fingerprint
+            )
+            .limit(5);
+
+        if (
+          fingerprintError
+        ) {
+          throw fingerprintError;
+        }
+
+        if (
+          !editingTransactionId &&
+          fingerprintMatches &&
+          fingerprintMatches.length >
+            0
+        ) {
+          setError(
+            `Possible duplicate detected: ${fingerprintMatches[0].merchant} for ${formatCurrencyValue(
+              Number(
+                fingerprintMatches[0]
+                  .amount
+              )
+            )} on ${
+              fingerprintMatches[0]
+                .transaction_date
+            }.`
+          );
+
+          setSaving(false);
+          return;
+        }
+
+        /*
+         * Broader duplicate check.
+         */
+        const candidate =
+          {
+            cardId:
+              selectedCard?.id ??
+              null,
+            merchant:
+              trimmedMerchant,
+            amount:
+              numericAmount,
+            transactionDate,
+            transactionType,
+          };
+
+        const {
+          data:
+            nearbyMatches,
+          error:
+            nearbyError,
+        } =
+          await supabase
+            .from(
+              "spend_transactions"
+            )
+            .select(
+              "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, transaction_type"
+            )
+            .eq(
+              "user_id",
+              user.id
+            )
+            .eq(
+              "profile_id",
+              profile.id
+            )
+            .eq(
+              "card_id",
+              selectedCard?.id ??
+                ""
+            )
+            .eq(
+              "transaction_type",
+              transactionType
+            )
+            .gte(
+              "transaction_date",
+              getDateOffset(
+                transactionDate,
+                -2
+              )
+            )
+            .lte(
+              "transaction_date",
+              getDateOffset(
+                transactionDate,
+                2
+              )
+            )
+            .limit(50);
+
+        if (
+          nearbyError
+        ) {
+          throw nearbyError;
+        }
+
+        const potentialDuplicate =
+          !editingTransactionId
+            ? (
+                (
+                  nearbyMatches ??
+                  []
+                ) as SpendTransaction[]
+              ).find(
+                (
+                  existing
+                ) =>
+                  isPotentialDuplicate(
+                    existing,
+                    candidate
+                  )
+              )
+            : undefined;
+
+        if (
+          potentialDuplicate
+        ) {
+          const proceed =
+            window.confirm(
+              `Possible duplicate found.\n\n${potentialDuplicate.merchant}\n${formatCurrencyValue(
+                Number(
+                  potentialDuplicate.amount
+                )
+              )}\n${potentialDuplicate.transaction_date}\n\nDo you want to add this transaction anyway?`
+            );
+
+          if (!proceed) {
+            setSaving(
+              false
+            );
+            return;
+          }
+        }
+
+        const transactionPayload =
+          {
+            user_id:
+              user.id,
+            profile_id:
+              profile.id,
+            card_id:
+              selectedCard?.id ??
+              null,
+
+            merchant:
+              trimmedMerchant,
+            merchant_raw:
+              trimmedMerchant,
+
+            amount:
+              numericAmount,
+
+            original_transaction_amount:
+              numericAmount,
+
+            currency_code:
+              profile.currency_code,
+
+            category,
+
+            mcc:
+              numericMcc,
+
+            mcc_description:
+              mccDescription.trim() ||
+              null,
+
+            classification_method:
+              numericMcc !==
+              null
+                ? "mcc"
+                : "manual",
+
+            payment_route:
+              paymentRoute ||
+              null,
+
+            transaction_type:
+              transactionType,
+
+            original_transaction_id:
+              originalTransactionId ||
+              null,
+
+            emi_status:
+              emiStatus,
+
+            emi_principal:
+              emiStatus !==
+                "regular"
+                ? numericEmiPrincipal
+                : null,
+
+            emi_interest_rate:
+              emiStatus !==
+                "regular"
+                ? numericInterestRate
+                : null,
+
+            emi_interest:
+              emiStatus !==
+                "regular"
+                ? numericInterest
+                : null,
+
+            emi_processing_fee:
+              emiStatus !==
+                "regular"
+                ? numericProcessingFee
+                : null,
+
+            gst_on_processing_fee:
+              emiStatus !==
+                "regular"
+                ? numericGstProcessingFee
+                : null,
+
+            gst_on_interest:
+              emiStatus !==
+                "regular"
+                ? numericGstInterest
+                : null,
+
+            emi_other_fees:
+              emiStatus !==
+                "regular"
+                ? numericOtherFees
+                : null,
+
+            emi_number:
+              emiStatus !==
+                "regular"
+                ? numericEmiNumber
+                : null,
+
+            total_emis:
+              emiStatus !==
+                "regular"
+                ? numericTotalEmis
+                : null,
+
+            emi_total_payable:
+              emiStatus !==
+                "regular"
+                ? numericTotalPayable
+                : null,
+
+            emi_start_date:
+              emiStatus !==
+                "regular"
+                ? emiStartDate ||
+                  null
+                : null,
+
+            emi_end_date:
+              emiStatus !==
+                "regular"
+                ? emiEndDate ||
+                  null
+                : null,
+
+            total_transaction_cost:
+              numericTotalCost,
+
+            transaction_fingerprint:
+              fingerprint,
+
+            notes:
+              notes.trim() ||
+              null,
+
+            source_type:
+              "manual",
+          };
+
         if (
           editingTransactionId
         ) {
@@ -1074,38 +2314,9 @@ export default function SpendPage() {
               .from(
                 "spend_transactions"
               )
-              .update({
-                card_id:
-                  selectedCard?.id ??
-                  null,
-
-                merchant:
-                  trimmedMerchant,
-
-                merchant_raw:
-                  trimmedMerchant,
-
-                amount:
-                  numericAmount,
-
-                currency_code:
-                  profile.currency_code,
-
-                category,
-
-                classification_method:
-                  "manual",
-
-                transaction_date:
-                  transactionDate,
-
-                notes:
-                  notes.trim() ||
-                  null,
-
-                transaction_type:
-                  "purchase",
-              })
+              .update(
+                transactionPayload
+              )
               .eq(
                 "id",
                 editingTransactionId
@@ -1119,7 +2330,7 @@ export default function SpendPage() {
                 profile.id
               )
               .select(
-                "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, merchant_raw, mcc, mcc_description, classification_method, payment_route, transaction_type, source_type, source_transaction_id"
+                "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, merchant_raw, mcc, mcc_description, classification_method, payment_route, transaction_type, source_type, source_transaction_id, emi_status, emi_principal, emi_interest_rate, emi_interest, emi_processing_fee, emi_tax, gst_on_processing_fee, gst_on_interest, emi_other_fees, emi_number, total_emis, emi_total_payable, emi_start_date, emi_end_date, original_transaction_amount, total_transaction_cost, reward_adjustment_amount, fee_waiver_adjustment_amount, original_transaction_id, transaction_fingerprint"
               )
               .single();
 
@@ -1145,7 +2356,7 @@ export default function SpendPage() {
           );
 
           setSuccessMessage(
-            "Purchase updated successfully."
+            "Transaction updated successfully."
           );
         } else {
           const {
@@ -1157,49 +2368,11 @@ export default function SpendPage() {
               .from(
                 "spend_transactions"
               )
-              .insert({
-                user_id:
-                  user.id,
-
-                profile_id:
-                  profile.id,
-
-                card_id:
-                  selectedCard?.id ??
-                  null,
-
-                merchant:
-                  trimmedMerchant,
-
-                merchant_raw:
-                  trimmedMerchant,
-
-                amount:
-                  numericAmount,
-
-                currency_code:
-                  profile.currency_code,
-
-                category,
-
-                classification_method:
-                  "manual",
-
-                transaction_date:
-                  transactionDate,
-
-                notes:
-                  notes.trim() ||
-                  null,
-
-                transaction_type:
-                  "purchase",
-
-                source_type:
-                  "manual",
-              })
+              .insert(
+                transactionPayload
+              )
               .select(
-                "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, merchant_raw, mcc, mcc_description, classification_method, payment_route, transaction_type, source_type, source_transaction_id"
+                "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, merchant_raw, mcc, mcc_description, classification_method, payment_route, transaction_type, source_type, source_transaction_id, emi_status, emi_principal, emi_interest_rate, emi_interest, emi_processing_fee, emi_tax, gst_on_processing_fee, gst_on_interest, emi_other_fees, emi_number, total_emis, emi_total_payable, emi_start_date, emi_end_date, original_transaction_amount, total_transaction_cost, reward_adjustment_amount, fee_waiver_adjustment_amount, original_transaction_id, transaction_fingerprint"
               )
               .single();
 
@@ -1219,7 +2392,7 @@ export default function SpendPage() {
           );
 
           setSuccessMessage(
-            "Purchase recorded successfully."
+            "Transaction recorded successfully."
           );
         }
 
@@ -1247,13 +2420,11 @@ export default function SpendPage() {
         setError(
           message ||
             (editingTransactionId
-              ? "Unable to update this purchase."
-              : "Unable to record this purchase.")
+              ? "Unable to update this transaction."
+              : "Unable to record this transaction.")
         );
       } finally {
-        setSaving(
-          false
-        );
+        setSaving(false);
       }
     };
 
@@ -1289,6 +2460,140 @@ export default function SpendPage() {
           ""
       );
 
+      setMcc(
+        transaction.mcc !=
+          null
+          ? String(
+              transaction.mcc
+            )
+          : ""
+      );
+
+      setMccDescription(
+        transaction.mcc_description ??
+          ""
+      );
+
+      setPaymentRoute(
+        transaction.payment_route ??
+          ""
+      );
+
+      setTransactionType(
+        (transaction.transaction_type ??
+          "purchase") as (typeof TRANSACTION_TYPES)[number]["value"]
+      );
+
+      setOriginalTransactionId(
+        transaction.original_transaction_id ??
+          ""
+      );
+
+      setEmiStatus(
+        (transaction.emi_status ??
+          "regular") as (typeof EMI_STATUSES)[number]["value"]
+      );
+
+      setEmiPrincipal(
+        transaction.emi_principal !=
+          null
+          ? String(
+              transaction.emi_principal
+            )
+          : ""
+      );
+
+      setEmiInterestRate(
+        transaction.emi_interest_rate !=
+          null
+          ? String(
+              transaction.emi_interest_rate
+            )
+          : ""
+      );
+
+      setEmiInterest(
+        transaction.emi_interest !=
+          null
+          ? String(
+              transaction.emi_interest
+            )
+          : ""
+      );
+
+      setEmiProcessingFee(
+        transaction.emi_processing_fee !=
+          null
+          ? String(
+              transaction.emi_processing_fee
+            )
+          : ""
+      );
+
+      setGstOnProcessingFee(
+        transaction.gst_on_processing_fee !=
+          null
+          ? String(
+              transaction.gst_on_processing_fee
+            )
+          : ""
+      );
+
+      setGstOnInterest(
+        transaction.gst_on_interest !=
+          null
+          ? String(
+              transaction.gst_on_interest
+            )
+          : ""
+      );
+
+      setEmiOtherFees(
+        transaction.emi_other_fees !=
+          null
+          ? String(
+              transaction.emi_other_fees
+            )
+          : ""
+      );
+
+      setEmiNumber(
+        transaction.emi_number !=
+          null
+          ? String(
+              transaction.emi_number
+            )
+          : ""
+      );
+
+      setTotalEmis(
+        transaction.total_emis !=
+          null
+          ? String(
+              transaction.total_emis
+            )
+          : ""
+      );
+
+      setEmiTotalPayable(
+        transaction.emi_total_payable !=
+          null
+          ? String(
+              transaction.emi_total_payable
+            )
+          : ""
+      );
+
+      setEmiStartDate(
+        transaction.emi_start_date ??
+          ""
+      );
+
+      setEmiEndDate(
+        transaction.emi_end_date ??
+          ""
+      );
+
       setEditingTransactionId(
         transaction.id
       );
@@ -1300,7 +2605,8 @@ export default function SpendPage() {
 
       window.scrollTo({
         top: 0,
-        behavior: "smooth",
+        behavior:
+          "smooth",
       });
     };
 
@@ -1310,7 +2616,7 @@ export default function SpendPage() {
     ) => {
       const confirmed =
         window.confirm(
-          `Delete the "${transaction.merchant}" purchase permanently?\n\nThis action cannot be undone.`
+          `Delete the "${transaction.merchant}" transaction permanently?\n\nThis action cannot be undone.`
         );
 
       if (!confirmed) {
@@ -1342,10 +2648,12 @@ export default function SpendPage() {
         return;
       }
 
-      const profile =
+      const currentProfile =
         activeProfile;
 
-      if (!profile?.id) {
+      if (
+        !currentProfile?.id
+      ) {
         setError(
           "No active profile is available."
         );
@@ -1376,7 +2684,7 @@ export default function SpendPage() {
           )
           .eq(
             "profile_id",
-            profile.id
+            currentProfile.id
           );
 
       if (
@@ -1388,7 +2696,7 @@ export default function SpendPage() {
 
         setError(
           deleteError.message ||
-            "Unable to delete this purchase."
+            "Unable to delete this transaction."
         );
 
         setDeletingTransactionId(
@@ -1415,7 +2723,7 @@ export default function SpendPage() {
       }
 
       setSuccessMessage(
-        "Purchase deleted successfully."
+        "Transaction deleted successfully."
       );
 
       setDeletingTransactionId(
@@ -1441,10 +2749,12 @@ export default function SpendPage() {
         return;
       }
 
-      const profile =
+      const currentProfile =
         activeProfile;
 
-      if (!profile?.id) {
+      if (
+        !currentProfile?.id
+      ) {
         setError(
           "No active profile is available."
         );
@@ -1471,10 +2781,12 @@ export default function SpendPage() {
       if (
         !file.name
           .toLowerCase()
-          .endsWith(".csv")
+          .endsWith(
+            ".csv"
+          )
       ) {
         setError(
-          "CSV statement import is available at this stage. PDF and Excel statement processing will be added through the secure document-ingestion layer."
+          "CSV statement import is available at this stage. PDF and Excel imports will be added through the secure document-processing layer."
         );
 
         event.target.value =
@@ -1563,6 +2875,15 @@ export default function SpendPage() {
             ]
           );
 
+        const mccDescriptionIndex =
+          findColumnIndex(
+            headers,
+            [
+              "mcc description",
+              "merchant category description",
+            ]
+          );
+
         const referenceIndex =
           findColumnIndex(
             headers,
@@ -1577,6 +2898,16 @@ export default function SpendPage() {
             ]
           );
 
+        const originalReferenceIndex =
+          findColumnIndex(
+            headers,
+            [
+              "original transaction id",
+              "original transaction reference",
+              "original reference",
+            ]
+          );
+
         const typeIndex =
           findColumnIndex(
             headers,
@@ -1584,6 +2915,150 @@ export default function SpendPage() {
               "transaction type",
               "type",
               "debit credit",
+            ]
+          );
+
+        const paymentRouteIndex =
+          findColumnIndex(
+            headers,
+            [
+              "payment route",
+              "payment method",
+              "channel",
+            ]
+          );
+
+        const emiStatusIndex =
+          findColumnIndex(
+            headers,
+            [
+              "emi status",
+              "emi type",
+              "emi",
+              "installment type",
+            ]
+          );
+
+        const principalIndex =
+          findColumnIndex(
+            headers,
+            [
+              "principal",
+              "principal amount",
+              "emi principal",
+            ]
+          );
+
+        const interestRateIndex =
+          findColumnIndex(
+            headers,
+            [
+              "interest rate",
+              "rate of interest",
+              "roi",
+              "interest %",
+            ]
+          );
+
+        const interestIndex =
+          findColumnIndex(
+            headers,
+            [
+              "interest",
+              "interest amount",
+              "emi interest",
+            ]
+          );
+
+        const processingFeeIndex =
+          findColumnIndex(
+            headers,
+            [
+              "processing fee",
+              "emi processing fee",
+            ]
+          );
+
+        const gstProcessingIndex =
+          findColumnIndex(
+            headers,
+            [
+              "gst on processing fee",
+              "processing fee gst",
+              "gst processing fee",
+            ]
+          );
+
+        const gstInterestIndex =
+          findColumnIndex(
+            headers,
+            [
+              "gst on interest",
+              "interest gst",
+            ]
+          );
+
+        const emiOtherFeesIndex =
+          findColumnIndex(
+            headers,
+            [
+              "other emi fees",
+              "other fees",
+              "emi other fees",
+            ]
+          );
+
+        const emiNumberIndex =
+          findColumnIndex(
+            headers,
+            [
+              "emi number",
+              "installment number",
+              "instalment number",
+              "emi no",
+              "installment no",
+            ]
+          );
+
+        const totalEmisIndex =
+          findColumnIndex(
+            headers,
+            [
+              "total emis",
+              "total emi",
+              "tenure",
+              "total installments",
+              "total instalments",
+            ]
+          );
+
+        const totalPayableIndex =
+          findColumnIndex(
+            headers,
+            [
+              "total payable",
+              "emi total payable",
+              "total amount payable",
+            ]
+          );
+
+        const emiStartDateIndex =
+          findColumnIndex(
+            headers,
+            [
+              "emi start date",
+              "installment start date",
+              "instalment start date",
+            ]
+          );
+
+        const emiEndDateIndex =
+          findColumnIndex(
+            headers,
+            [
+              "emi end date",
+              "installment end date",
+              "instalment end date",
             ]
           );
 
@@ -1678,11 +3153,7 @@ export default function SpendPage() {
               )
               .eq(
                 "profile_id",
-                profile.id
-              )
-              .eq(
-                "source_type",
-                "statement_csv"
+                currentProfile.id
               )
               .in(
                 "source_transaction_id",
@@ -1718,6 +3189,44 @@ export default function SpendPage() {
             );
         }
 
+        /*
+         * Pull recent transactions for broader
+         * duplicate checking when the statement
+         * doesn't have a unique reference number.
+         */
+        const {
+          data:
+            existingTransactions,
+          error:
+            existingTransactionsError,
+        } =
+          await supabase
+            .from(
+              "spend_transactions"
+            )
+            .select(
+              "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, transaction_type, source_transaction_id, transaction_fingerprint"
+            )
+            .eq(
+              "user_id",
+              user.id
+            )
+            .eq(
+              "profile_id",
+              currentProfile.id
+            )
+            .eq(
+              "card_id",
+              selectedImportCardId
+            )
+            .limit(500);
+
+        if (
+          existingTransactionsError
+        ) {
+          throw existingTransactionsError;
+        }
+
         const parsedRows: ImportRow[] =
           [];
 
@@ -1745,7 +3254,7 @@ export default function SpendPage() {
                 ]?.trim() ??
                 "";
 
-              const numericAmount =
+              const parsedAmount =
                 parseAmount(
                   row[
                     amountIndex
@@ -1769,7 +3278,7 @@ export default function SpendPage() {
                     ).trim()
                   : "";
 
-              const classification =
+              const categoryResult =
                 explicitCategory
                   ? {
                       category:
@@ -1781,24 +3290,48 @@ export default function SpendPage() {
                       rawMerchant
                     );
 
-              const rawType =
+              const rawMcc =
+                mccIndex >=
+                0
+                  ? (
+                      row[
+                        mccIndex
+                      ] ?? ""
+                    ).trim()
+                  : "";
+
+              const parsedMcc =
+                rawMcc
+                  ? Number(
+                      rawMcc.replace(
+                        /[^\d]/g,
+                        ""
+                      )
+                    )
+                  : null;
+
+              const parsedMccValue =
+                parsedMcc &&
+                Number.isInteger(
+                  parsedMcc
+                )
+                  ? parsedMcc
+                  : null;
+
+              const rawTransactionType =
                 typeIndex >=
                 0
                   ? (
                       row[
                         typeIndex
                       ] ?? ""
-                    )
-                      .trim()
-                      .toLowerCase()
+                    ).trim()
                   : "";
 
-              const transactionType =
-                /refund|reversal|credit/.test(
-                  rawType
-                )
-                  ? "refund"
-                  : "purchase";
+              const parsedTransactionType =
+                normalizeTransactionType(
+                  rawTransactionType
+                );
 
               const sourceTransactionId =
                 referenceIndex >=
@@ -1812,19 +3345,198 @@ export default function SpendPage() {
                     null
                   : null;
 
+              const originalReference =
+                originalReferenceIndex >=
+                0
+                  ? (
+                      row[
+                        originalReferenceIndex
+                      ] ??
+                      ""
+                    ).trim() ||
+                    null
+                  : null;
+
+              const rawEmiStatus =
+                emiStatusIndex >=
+                0
+                  ? (
+                      row[
+                        emiStatusIndex
+                      ] ?? ""
+                    ).trim()
+                  : "";
+
+              const parsedEmiStatus =
+                normalizeEmiStatus(
+                  rawEmiStatus
+                );
+
+              const parsedPrincipal =
+                principalIndex >=
+                0
+                  ? parseOptionalNumber(
+                      row[
+                        principalIndex
+                      ] ?? ""
+                    )
+                  : null;
+
+              const parsedInterestRate =
+                interestRateIndex >=
+                0
+                  ? parseOptionalNumber(
+                      row[
+                        interestRateIndex
+                      ] ?? ""
+                    )
+                  : null;
+
+              const parsedInterest =
+                interestIndex >=
+                0
+                  ? parseOptionalNumber(
+                      row[
+                        interestIndex
+                      ] ?? ""
+                    )
+                  : null;
+
+              const parsedProcessingFee =
+                processingFeeIndex >=
+                0
+                  ? parseOptionalNumber(
+                      row[
+                        processingFeeIndex
+                      ] ?? ""
+                    )
+                  : null;
+
+              const parsedGstProcessing =
+                gstProcessingIndex >=
+                0
+                  ? parseOptionalNumber(
+                      row[
+                        gstProcessingIndex
+                      ] ?? ""
+                    )
+                  : null;
+
+              const parsedGstInterest =
+                gstInterestIndex >=
+                0
+                  ? parseOptionalNumber(
+                      row[
+                        gstInterestIndex
+                      ] ?? ""
+                    )
+                  : null;
+
+              const parsedOtherFees =
+                emiOtherFeesIndex >=
+                0
+                  ? parseOptionalNumber(
+                      row[
+                        emiOtherFeesIndex
+                      ] ?? ""
+                    )
+                  : null;
+
+              const parsedEmiNumber =
+                emiNumberIndex >=
+                0
+                  ? parseInteger(
+                      row[
+                        emiNumberIndex
+                      ] ?? ""
+                    )
+                  : null;
+
+              const parsedTotalEmis =
+                totalEmisIndex >=
+                0
+                  ? parseInteger(
+                      row[
+                        totalEmisIndex
+                      ] ?? ""
+                    )
+                  : null;
+
+              const parsedTotalPayable =
+                totalPayableIndex >=
+                0
+                  ? parseOptionalNumber(
+                      row[
+                        totalPayableIndex
+                      ] ?? ""
+                    )
+                  : null;
+
+              const parsedEmiStartDate =
+                emiStartDateIndex >=
+                0
+                  ? parseDate(
+                      row[
+                        emiStartDateIndex
+                      ] ?? ""
+                    )
+                  : null;
+
+              const parsedEmiEndDate =
+                emiEndDateIndex >=
+                0
+                  ? parseDate(
+                      row[
+                        emiEndDateIndex
+                      ] ?? ""
+                    )
+                  : null;
+
+              const paymentRouteValue =
+                paymentRouteIndex >=
+                0
+                  ? (
+                      row[
+                        paymentRouteIndex
+                      ] ?? ""
+                    ).trim() ||
+                    null
+                  : null;
+
               const hasError =
                 !rawMerchant
                   ? "Merchant/description is missing."
-                  : numericAmount ===
+                  : parsedAmount ===
                         null ||
-                      numericAmount <=
+                      parsedAmount ===
                         0
                     ? "Amount could not be read."
                     : !parsedDate
                       ? "Transaction date could not be read."
                       : null;
 
-              const duplicate =
+              const normalizedAmount =
+                Math.abs(
+                  parsedAmount ??
+                    0
+                );
+
+              const fingerprint =
+                buildFingerprintInput({
+                  cardId:
+                    selectedImportCardId,
+                  transactionDate:
+                    parsedDate ??
+                    "",
+                  amount:
+                    normalizedAmount,
+                  merchant:
+                    rawMerchant,
+                  transactionType:
+                    parsedTransactionType,
+                });
+
+              const sourceDuplicate =
                 Boolean(
                   sourceTransactionId &&
                     existingSourceIds.has(
@@ -1832,64 +3544,191 @@ export default function SpendPage() {
                     )
                 );
 
-              const mccRaw =
-                mccIndex >= 0
+              const broaderDuplicate =
+                !sourceDuplicate &&
+                !hasError
                   ? (
-                      row[
-                        mccIndex
-                      ] ?? ""
-                    ).trim()
-                  : "";
+                      (
+                        existingTransactions ??
+                        []
+                      ) as SpendTransaction[]
+                    ).some(
+                      (
+                        existing
+                      ) =>
+                        isPotentialDuplicate(
+                          existing,
+                          {
+                            cardId:
+                              selectedImportCardId,
+                            merchant:
+                              rawMerchant,
+                            amount:
+                              normalizedAmount,
+                            transactionDate:
+                              parsedDate ??
+                              "",
+                            transactionType:
+                              parsedTransactionType,
+                          }
+                        )
+                    )
+                  : false;
 
               parsedRows.push({
                 rowNumber:
                   index + 2,
+
                 merchant:
                   rawMerchant,
+
                 merchantRaw:
                   rawMerchant,
+
                 amount:
-                  Math.abs(
-                    numericAmount ??
-                      0
-                  ),
+                  normalizedAmount,
+
+                originalTransactionAmount:
+                  normalizedAmount,
+
                 transactionDate:
                   parsedDate ??
                   "",
+
                 category:
-                  classification.category,
+                  categoryResult.category,
+
                 cardId:
                   selectedImportCardId,
+
                 sourceTransactionId,
-                transactionType,
+
+                transactionType:
+                  parsedTransactionType,
+
                 paymentRoute:
-                  null,
+                  paymentRouteValue,
+
+                mcc:
+                  parsedMccValue,
+
+                mccDescription:
+                  mccDescriptionIndex >=
+                  0
+                    ? (
+                        row[
+                          mccDescriptionIndex
+                        ] ?? ""
+                      ).trim() ||
+                      null
+                    : null,
+
                 classificationMethod:
-                  mccRaw
+                  parsedMccValue !==
+                  null
                     ? "mcc"
-                    : classification.classificationMethod,
+                    : categoryResult.classificationMethod,
+
+                emiStatus:
+                  parsedEmiStatus,
+
+                emiPrincipal:
+                  parsedEmiStatus !==
+                  "regular"
+                    ? parsedPrincipal
+                    : null,
+
+                emiInterestRate:
+                  parsedEmiStatus !==
+                  "regular"
+                    ? parsedInterestRate
+                    : null,
+
+                emiInterest:
+                  parsedEmiStatus !==
+                  "regular"
+                    ? parsedInterest
+                    : null,
+
+                emiProcessingFee:
+                  parsedEmiStatus !==
+                  "regular"
+                    ? parsedProcessingFee
+                    : null,
+
+                gstOnProcessingFee:
+                  parsedEmiStatus !==
+                  "regular"
+                    ? parsedGstProcessing
+                    : null,
+
+                gstOnInterest:
+                  parsedEmiStatus !==
+                  "regular"
+                    ? parsedGstInterest
+                    : null,
+
+                emiOtherFees:
+                  parsedEmiStatus !==
+                  "regular"
+                    ? parsedOtherFees
+                    : null,
+
+                emiNumber:
+                  parsedEmiStatus !==
+                  "regular"
+                    ? parsedEmiNumber
+                    : null,
+
+                totalEmis:
+                  parsedEmiStatus !==
+                  "regular"
+                    ? parsedTotalEmis
+                    : null,
+
+                emiTotalPayable:
+                  parsedEmiStatus !==
+                  "regular"
+                    ? parsedTotalPayable
+                    : null,
+
+                emiStartDate:
+                  parsedEmiStatus !==
+                  "regular"
+                    ? parsedEmiStartDate
+                    : null,
+
+                emiEndDate:
+                  parsedEmiStatus !==
+                  "regular"
+                    ? parsedEmiEndDate
+                    : null,
+
+                totalTransactionCost:
+                  parsedTotalPayable ??
+                  normalizedAmount,
+
                 rawValues:
                   row,
-                duplicate,
+
+                duplicate:
+                  sourceDuplicate ||
+                  broaderDuplicate,
+
                 selected:
-                  !duplicate &&
+                  !sourceDuplicate &&
+                  !broaderDuplicate &&
                   !hasError,
+
                 error:
                   hasError,
               });
             }
           );
 
-        /*
-         * Only create the import batch once the CSV
-         * has passed validation and has rows to review.
-         */
-        const validOrReviewableRows =
-          parsedRows.length >
-          0;
-
         if (
-          !validOrReviewableRows
+          parsedRows.length ===
+          0
         ) {
           throw new Error(
             "No transaction rows could be read from this statement."
@@ -1908,16 +3747,22 @@ export default function SpendPage() {
             .insert({
               user_id:
                 user.id,
+
               profile_id:
-                profile.id,
+                currentProfile.id,
+
               card_id:
                 selectedImportCardId,
+
               source_type:
                 "statement_csv",
+
               status:
                 "review_required",
+
               transactions_found:
                 parsedRows.length,
+
               transactions_skipped:
                 parsedRows.filter(
                   (
@@ -2016,10 +3861,12 @@ export default function SpendPage() {
 
   const handleImportTransactions =
     async () => {
-      const profile =
+      const currentProfile =
         activeProfile;
 
-      if (!profile?.id) {
+      if (
+        !currentProfile?.id
+      ) {
         setError(
           "No active profile is available."
         );
@@ -2079,55 +3926,131 @@ export default function SpendPage() {
         }
 
         const payload =
-          rowsToImport.map(
-            (
-              row
-            ) => ({
-              user_id:
-                user.id,
+          await Promise.all(
+            rowsToImport.map(
+              async (
+                row
+              ) => {
+                const fingerprint =
+                  await createTransactionFingerprint({
+                    cardId:
+                      selectedImportCardId,
 
-              profile_id:
-                profile.id,
+                    transactionDate:
+                      row.transactionDate,
 
-              card_id:
-                selectedImportCardId,
+                    amount:
+                      row.amount,
 
-              merchant:
-                row.merchant,
+                    merchant:
+                      row.merchant,
 
-              merchant_raw:
-                row.merchantRaw,
+                    transactionType:
+                      row.transactionType,
+                  });
 
-              amount:
-                row.amount,
+                return {
+                  user_id:
+                    user.id,
 
-              currency_code:
-                profile.currency_code,
+                  profile_id:
+                    currentProfile.id,
 
-              category:
-                row.category,
+                  card_id:
+                    selectedImportCardId,
 
-              classification_method:
-                row.classificationMethod,
+                  merchant:
+                    row.merchant,
 
-              payment_route:
-                row.paymentRoute,
+                  merchant_raw:
+                    row.merchantRaw,
 
-              transaction_type:
-                row.transactionType,
+                  amount:
+                    row.amount,
 
-              source_type:
-                "statement_csv",
+                  original_transaction_amount:
+                    row.originalTransactionAmount,
 
-              source_transaction_id:
-                row.sourceTransactionId,
+                  currency_code:
+                    currentProfile.currency_code,
 
-              import_batch_id:
-                importBatchId,
+                  category:
+                    row.category,
 
-              transaction_date:
-                row.transactionDate,
-            })
+                  mcc:
+                    row.mcc,
+
+                  mcc_description:
+                    row.mccDescription,
+
+                  classification_method:
+                    row.classificationMethod,
+
+                  payment_route:
+                    row.paymentRoute,
+
+                  transaction_type:
+                    row.transactionType,
+
+                  source_type:
+                    "statement_csv",
+
+                  source_transaction_id:
+                    row.sourceTransactionId,
+
+                  import_batch_id:
+                    importBatchId,
+
+                  original_transaction_id:
+                    null,
+
+                  emi_status:
+                    row.emiStatus,
+
+                  emi_principal:
+                    row.emiPrincipal,
+
+                  emi_interest_rate:
+                    row.emiInterestRate,
+
+                  emi_interest:
+                    row.emiInterest,
+
+                  emi_processing_fee:
+                    row.emiProcessingFee,
+
+                  gst_on_processing_fee:
+                    row.gstOnProcessingFee,
+
+                  gst_on_interest:
+                    row.gstOnInterest,
+
+                  emi_other_fees:
+                    row.emiOtherFees,
+
+                  emi_number:
+                    row.emiNumber,
+
+                  total_emis:
+                    row.totalEmis,
+
+                  emi_total_payable:
+                    row.emiTotalPayable,
+
+                  emi_start_date:
+                    row.emiStartDate,
+
+                  emi_end_date:
+                    row.emiEndDate,
+
+                  total_transaction_cost:
+                    row.totalTransactionCost,
+
+                  transaction_fingerprint:
+                    fingerprint,
+                };
+              }
+            )
           );
 
         const {
@@ -2143,7 +4066,7 @@ export default function SpendPage() {
               payload
             )
             .select(
-              "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, merchant_raw, mcc, mcc_description, classification_method, payment_route, transaction_type, source_type, source_transaction_id"
+              "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, merchant_raw, mcc, mcc_description, classification_method, payment_route, transaction_type, source_type, source_transaction_id, emi_status, emi_principal, emi_interest_rate, emi_interest, emi_processing_fee, emi_tax, gst_on_processing_fee, gst_on_interest, emi_other_fees, emi_number, total_emis, emi_total_payable, emi_start_date, emi_end_date, original_transaction_amount, total_transaction_cost, reward_adjustment_amount, fee_waiver_adjustment_amount, original_transaction_id, transaction_fingerprint"
             );
 
         if (
@@ -2167,8 +4090,18 @@ export default function SpendPage() {
                 transactions_imported:
                   data?.length ??
                   0,
+
+                transactions_skipped:
+                  importRows.filter(
+                    (
+                      row
+                    ) =>
+                      row.duplicate
+                  ).length,
+
                 status:
                   "completed",
+
                 completed_at:
                   new Date().toISOString(),
               })
@@ -2255,22 +4188,24 @@ export default function SpendPage() {
       }
     };
 
-  const clearImport = () => {
-    setImportRows([]);
-    setImportFileName("");
-    setImportBatchId(
-      null
-    );
-    setError("");
-    setSuccessMessage("");
+  const clearImport =
+    () => {
+      setImportRows([]);
+      setImportFileName("");
+      setImportBatchId(
+        null
+      );
 
-    if (
-      fileInputRef.current
-    ) {
-      fileInputRef.current.value =
-        "";
-    }
-  };
+      setError("");
+      setSuccessMessage("");
+
+      if (
+        fileInputRef.current
+      ) {
+        fileInputRef.current.value =
+          "";
+      }
+    };
 
   const formatAmount = (
     value: number
@@ -2281,15 +4216,17 @@ export default function SpendPage() {
         {
           style:
             "currency",
+
           currency:
-            activeProfile?.currency_code ??
+            profile?.currency_code ??
             "INR",
+
           maximumFractionDigits: 2,
         }
       ).format(value);
     } catch {
       return `${
-        activeProfile?.currency_code ??
+        profile?.currency_code ??
         ""
       } ${value.toFixed(
         2
@@ -2308,7 +4245,9 @@ export default function SpendPage() {
 
     const card =
       cards.find(
-        (item) =>
+        (
+          item
+        ) =>
           item.id ===
           transaction.card_id
       );
@@ -2320,6 +4259,45 @@ export default function SpendPage() {
     return card.card_last_four
       ? `${card.name} ···· ${card.card_last_four}`
       : card.name;
+  };
+
+  const getTransactionTypeLabel =
+    (
+      type:
+        | string
+        | null
+        | undefined
+    ) =>
+      TRANSACTION_TYPES.find(
+        (
+          item
+        ) =>
+          item.value ===
+          type
+      )?.label ??
+      "Purchase";
+
+  const getEmiLabel = (
+    status:
+      | string
+      | null
+      | undefined
+  ) => {
+    if (
+      status ===
+      "no_cost_emi"
+    ) {
+      return "No-Cost EMI";
+    }
+
+    if (
+      status ===
+      "emi"
+    ) {
+      return "EMI";
+    }
+
+    return null;
   };
 
   if (
@@ -2336,7 +4314,7 @@ export default function SpendPage() {
     );
   }
 
-  if (!activeProfile) {
+  if (!profile) {
     return (
       <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
         <CardIQHeader />
@@ -2368,14 +4346,21 @@ export default function SpendPage() {
     );
   }
 
+  const isAdjustment =
+    transactionType ===
+      "refund" ||
+    transactionType ===
+      "reversal";
+
   return (
     <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
       <CardIQHeader />
 
       <div className="mx-auto max-w-6xl px-5 py-8 lg:px-8 lg:py-10">
+        {/* Header */}
         <section className="mb-8">
           <p className="mb-2 text-sm font-medium text-[var(--muted)]">
-            {activeProfile.name} profile
+            {profile.name} profile
           </p>
 
           <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
@@ -2384,15 +4369,15 @@ export default function SpendPage() {
                 Track Spend
               </h1>
 
-              <p className="mt-3 max-w-2xl text-base leading-7 text-[var(--muted)]">
-                Keep your spending history in one place and let CardIQ use it
-                for rewards, fee and milestone calculations.
+              <p className="mt-3 max-w-3xl text-base leading-7 text-[var(--muted)]">
+                Record and import transactions so CardIQ can track spend,
+                rewards, EMI costs and renewal-fee progress accurately.
               </p>
             </div>
 
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-5 py-4 shadow-sm">
               <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
-                Profile spend tracked
+                Net profile spend
               </p>
 
               <p className="mt-1 text-2xl font-bold">
@@ -2412,7 +4397,7 @@ export default function SpendPage() {
             </h2>
 
             <p className="mt-1 text-sm text-[var(--muted)]">
-              Choose how you want CardIQ to receive your spending data.
+              Import your statement or record a transaction manually.
             </p>
           </div>
 
@@ -2428,8 +4413,8 @@ export default function SpendPage() {
               </h3>
 
               <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-                Upload a CSV statement and review the transactions before
-                importing them.
+                Upload a CSV statement and review transactions before they
+                become part of your ledger.
               </p>
 
               <div className="mt-5">
@@ -2514,8 +4499,8 @@ export default function SpendPage() {
               </button>
 
               <p className="mt-2 text-xs text-[var(--muted)]">
-                PDF and Excel imports will use the secure document-processing
-                layer added next.
+                PDF and Excel will use the secure document-processing layer in
+                the next ingestion stage.
               </p>
             </div>
 
@@ -2530,8 +4515,8 @@ export default function SpendPage() {
               </h3>
 
               <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-                Automatic account connections will use the same transaction
-                pipeline as statement imports.
+                Account Aggregator connections will feed the same transaction
+                and duplicate-detection system.
               </p>
 
               <div className="mt-5 space-y-2">
@@ -2591,8 +4576,8 @@ export default function SpendPage() {
               </h3>
 
               <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-                Record a transaction yourself when you don't have a statement
-                or connected source available.
+                Add a purchase, EMI, refund or reversal when no statement or
+                connected source is available.
               </p>
 
               <button
@@ -2673,7 +4658,7 @@ export default function SpendPage() {
 
               <div className="rounded-xl bg-[var(--card-muted)] p-4">
                 <p className="text-xs uppercase tracking-wide text-[var(--muted)]">
-                  Already recorded
+                  Potential duplicates
                 </p>
 
                 <p className="mt-1 text-xl font-bold">
@@ -2685,7 +4670,7 @@ export default function SpendPage() {
             </div>
 
             <div className="mt-5 overflow-x-auto rounded-xl border border-[var(--border)]">
-              <table className="w-full min-w-[760px] border-collapse text-sm">
+              <table className="w-full min-w-[980px] border-collapse text-sm">
                 <thead>
                   <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wide text-[var(--muted)]">
                     <th className="px-4 py-3">
@@ -2701,7 +4686,11 @@ export default function SpendPage() {
                     </th>
 
                     <th className="px-4 py-3">
-                      Category
+                      Category / MCC
+                    </th>
+
+                    <th className="px-4 py-3">
+                      Type
                     </th>
 
                     <th className="px-4 py-3 text-right">
@@ -2716,7 +4705,9 @@ export default function SpendPage() {
 
                 <tbody>
                   {importRows.map(
-                    (row) => (
+                    (
+                      row
+                    ) => (
                       <tr
                         key={
                           row.rowNumber
@@ -2751,7 +4742,7 @@ export default function SpendPage() {
                           }
                         </td>
 
-                        <td className="max-w-[260px] px-4 py-3">
+                        <td className="max-w-[240px] px-4 py-3">
                           <p className="truncate font-medium">
                             {
                               row.merchant
@@ -2769,9 +4760,43 @@ export default function SpendPage() {
                         </td>
 
                         <td className="px-4 py-3">
-                          {
-                            row.category
-                          }
+                          <p>
+                            {
+                              row.category
+                            }
+                          </p>
+
+                          {row.mcc && (
+                            <p className="mt-1 text-xs text-[var(--muted)]">
+                              MCC{" "}
+                              {
+                                row.mcc
+                              }
+                              {row.mccDescription
+                                ? ` · ${row.mccDescription}`
+                                : ""}
+                            </p>
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <p>
+                            {getTransactionTypeLabel(
+                              row.transactionType
+                            )}
+                          </p>
+
+                          {getEmiLabel(
+                            row.emiStatus
+                          ) && (
+                            <p className="mt-1 text-xs font-medium text-[var(--muted)]">
+                              {
+                                getEmiLabel(
+                                  row.emiStatus
+                                )
+                              }
+                            </p>
+                          )}
                         </td>
 
                         <td className="whitespace-nowrap px-4 py-3 text-right font-medium">
@@ -2787,7 +4812,7 @@ export default function SpendPage() {
                             </span>
                           ) : row.duplicate ? (
                             <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">
-                              Already recorded
+                              Possible duplicate
                             </span>
                           ) : (
                             <span className="text-xs font-semibold text-green-600 dark:text-green-400">
@@ -2846,14 +4871,13 @@ export default function SpendPage() {
           <div className="mb-6">
             <h2 className="text-lg font-semibold">
               {editingTransactionId
-                ? "Edit purchase"
-                : "Record a purchase"}
+                ? "Edit transaction"
+                : "Record a transaction"}
             </h2>
 
-            <p className="mt-1 text-sm text-[var(--muted)]">
-              {editingTransactionId
-                ? "Update the selected purchase and save your changes."
-                : `Add a transaction manually to the ${activeProfile.name} profile.`}
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+              Store enough transaction detail for CardIQ to evaluate rewards,
+              EMI costs, monthly limits and annual fee-waiver progress.
             </p>
           </div>
 
@@ -2861,9 +4885,10 @@ export default function SpendPage() {
             onSubmit={
               handleSubmit
             }
-            className="space-y-5"
+            className="space-y-6"
           >
             <div className="grid gap-5 md:grid-cols-2">
+              {/* Merchant */}
               <div>
                 <label
                   htmlFor="merchant"
@@ -2890,12 +4915,13 @@ export default function SpendPage() {
                 />
               </div>
 
+              {/* Amount */}
               <div>
                 <label
                   htmlFor="amount"
                   className="mb-2 block text-sm font-semibold"
                 >
-                  Amount ({activeProfile.currency_code})
+                  Amount ({profile.currency_code})
                 </label>
 
                 <input
@@ -2919,6 +4945,7 @@ export default function SpendPage() {
                 />
               </div>
 
+              {/* Card */}
               <div>
                 <label
                   htmlFor="card"
@@ -2938,7 +4965,7 @@ export default function SpendPage() {
                         .value
                     )
                   }
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700 dark:focus:ring-slate-700"
                 >
                   <option value="">
                     No card / cash
@@ -2966,15 +4993,82 @@ export default function SpendPage() {
                     )
                   )}
                 </select>
-
-                {cards.length ===
-                  0 && (
-                  <p className="mt-2 text-xs text-[var(--muted)]">
-                    Add a card to your profile first.
-                  </p>
-                )}
               </div>
 
+              {/* Date */}
+              <div>
+                <label
+                  htmlFor="transaction-date"
+                  className="mb-2 block text-sm font-semibold"
+                >
+                  Transaction date
+                </label>
+
+                <input
+                  id="transaction-date"
+                  type="date"
+                  value={
+                    transactionDate
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setTransactionDate(
+                      event.target
+                        .value
+                    )
+                  }
+                  required
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
+                />
+              </div>
+
+              {/* Transaction type */}
+              <div>
+                <label
+                  htmlFor="transaction-type"
+                  className="mb-2 block text-sm font-semibold"
+                >
+                  Transaction type
+                </label>
+
+                <select
+                  id="transaction-type"
+                  value={
+                    transactionType
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    handleTransactionTypeChange(
+                      event.target
+                        .value
+                    )
+                  }
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
+                >
+                  {TRANSACTION_TYPES.map(
+                    (
+                      item
+                    ) => (
+                      <option
+                        key={
+                          item.value
+                        }
+                        value={
+                          item.value
+                        }
+                      >
+                        {
+                          item.label
+                        }
+                      </option>
+                    )
+                  )}
+                </select>
+              </div>
+
+              {/* Category */}
               <div>
                 <label
                   htmlFor="category"
@@ -2985,7 +5079,9 @@ export default function SpendPage() {
 
                 <select
                   id="category"
-                  value={category}
+                  value={
+                    category
+                  }
                   onChange={(
                     event
                   ) =>
@@ -3016,62 +5112,623 @@ export default function SpendPage() {
                 </select>
               </div>
 
+              {/* MCC */}
               <div>
                 <label
-                  htmlFor="transaction-date"
+                  htmlFor="mcc"
                   className="mb-2 block text-sm font-semibold"
                 >
-                  Purchase date
-                </label>
-
-                <input
-                  id="transaction-date"
-                  type="date"
-                  value={
-                    transactionDate
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setTransactionDate(
-                      event.target
-                        .value
-                    )
-                  }
-                  required
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:ring-slate-700"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="notes"
-                  className="mb-2 block text-sm font-semibold"
-                >
-                  Notes
+                  MCC
                   <span className="ml-2 font-normal text-[var(--muted)]">
                     Optional
                   </span>
                 </label>
 
                 <input
-                  id="notes"
+                  id="mcc"
                   type="text"
-                  value={notes}
+                  inputMode="numeric"
+                  maxLength={
+                    4
+                  }
+                  value={mcc}
                   onChange={(
                     event
                   ) =>
-                    setNotes(
+                    setMcc(
+                      event.target.value
+                        .replace(
+                          /\D/g,
+                          ""
+                        )
+                        .slice(
+                          0,
+                          4
+                        )
+                    )
+                  }
+                  placeholder="e.g. 5812"
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm tracking-widest text-[var(--foreground)] outline-none placeholder:tracking-normal placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
+                />
+              </div>
+
+              {/* Payment route */}
+              <div>
+                <label
+                  htmlFor="payment-route"
+                  className="mb-2 block text-sm font-semibold"
+                >
+                  Payment route
+                </label>
+
+                <select
+                  id="payment-route"
+                  value={
+                    paymentRoute
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setPaymentRoute(
                       event.target
                         .value
                     )
                   }
-                  placeholder="Optional note"
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
-                />
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
+                >
+                  <option value="">
+                    Select payment route
+                  </option>
+
+                  {PAYMENT_ROUTES.map(
+                    (
+                      route
+                    ) => (
+                      <option
+                        key={
+                          route
+                        }
+                        value={
+                          route
+                        }
+                      >
+                        {route}
+                      </option>
+                    )
+                  )}
+                </select>
               </div>
             </div>
 
+            {/* Original transaction */}
+            {isAdjustment && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900 dark:bg-amber-950/30">
+                <label
+                  htmlFor="original-transaction"
+                  className="mb-2 block text-sm font-semibold"
+                >
+                  Original transaction
+                </label>
+
+                <select
+                  id="original-transaction"
+                  value={
+                    originalTransactionId
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setOriginalTransactionId(
+                      event.target
+                        .value
+                    )
+                  }
+                  required
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
+                >
+                  <option value="">
+                    Select original purchase
+                  </option>
+
+                  {originalTransactionOptions
+                    .filter(
+                      (
+                        transaction
+                      ) =>
+                        transaction.card_id ===
+                        (cardId ||
+                          null)
+                    )
+                    .map(
+                      (
+                        transaction
+                      ) => (
+                        <option
+                          key={
+                            transaction.id
+                          }
+                          value={
+                            transaction.id
+                          }
+                        >
+                          {
+                            transaction.transaction_date
+                          }{" "}
+                          ·{" "}
+                          {
+                            transaction.merchant
+                          }{" "}
+                          ·{" "}
+                          {formatAmount(
+                            Number(
+                              transaction.amount
+                            )
+                          )}
+                        </option>
+                      )
+                    )}
+                </select>
+
+                <p className="mt-2 text-xs leading-5 text-amber-700 dark:text-amber-300">
+                  CardIQ will use this link to reverse the original transaction's
+                  spend and, through the reward engine, reverse associated rewards
+                  where applicable.
+                </p>
+              </div>
+            )}
+
+            {/* EMI */}
+            <div className="border-t border-[var(--border)] pt-6">
+              <div className="mb-5">
+                <h3 className="text-sm font-semibold">
+                  EMI details
+                </h3>
+
+                <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
+                  EMI transactions often have different reward treatment and
+                  additional costs. Enter the values shown on your statement.
+                </p>
+              </div>
+
+              <div className="mb-5">
+                <label
+                  htmlFor="emi-status"
+                  className="mb-2 block text-sm font-semibold"
+                >
+                  EMI status
+                </label>
+
+                <select
+                  id="emi-status"
+                  value={
+                    emiStatus
+                  }
+                  onChange={(
+                    event
+                  ) => {
+                    const value =
+                      event.target
+                        .value as (typeof EMI_STATUSES)[number]["value"];
+
+                    setEmiStatus(
+                      value
+                    );
+
+                    if (
+                      value ===
+                      "regular"
+                    ) {
+                      resetEmiFields();
+                    }
+                  }}
+                  disabled={
+                    transactionType !==
+                    "purchase"
+                  }
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:focus:border-slate-500 dark:focus:ring-slate-700 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
+                >
+                  {EMI_STATUSES.map(
+                    (
+                      item
+                    ) => (
+                      <option
+                        key={
+                          item.value
+                        }
+                        value={
+                          item.value
+                        }
+                      >
+                        {
+                          item.label
+                        }
+                      </option>
+                    )
+                  )}
+                </select>
+              </div>
+
+              {emiStatus !==
+                "regular" && (
+                <div className="grid gap-5 md:grid-cols-2">
+                  <div>
+                    <label
+                      htmlFor="emi-principal"
+                      className="mb-2 block text-sm font-semibold"
+                    >
+                      Principal amount
+                    </label>
+
+                    <input
+                      id="emi-principal"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={
+                        emiPrincipal
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setEmiPrincipal(
+                          event.target
+                            .value
+                        )
+                      }
+                      placeholder="e.g. 50000"
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="emi-interest-rate"
+                      className="mb-2 block text-sm font-semibold"
+                    >
+                      Interest rate (%)
+                    </label>
+
+                    <input
+                      id="emi-interest-rate"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={
+                        emiInterestRate
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setEmiInterestRate(
+                          event.target
+                            .value
+                        )
+                      }
+                      placeholder="e.g. 15.99"
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="emi-interest"
+                      className="mb-2 block text-sm font-semibold"
+                    >
+                      Interest amount
+                    </label>
+
+                    <input
+                      id="emi-interest"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={
+                        emiInterest
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setEmiInterest(
+                          event.target
+                            .value
+                        )
+                      }
+                      placeholder="e.g. 2400"
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="emi-processing-fee"
+                      className="mb-2 block text-sm font-semibold"
+                    >
+                      Processing fee
+                    </label>
+
+                    <input
+                      id="emi-processing-fee"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={
+                        emiProcessingFee
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setEmiProcessingFee(
+                          event.target
+                            .value
+                        )
+                      }
+                      placeholder="e.g. 999"
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="gst-processing-fee"
+                      className="mb-2 block text-sm font-semibold"
+                    >
+                      GST on processing fee
+                    </label>
+
+                    <input
+                      id="gst-processing-fee"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={
+                        gstOnProcessingFee
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setGstOnProcessingFee(
+                          event.target
+                            .value
+                        )
+                      }
+                      placeholder="e.g. 179.82"
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="gst-interest"
+                      className="mb-2 block text-sm font-semibold"
+                    >
+                      GST on interest
+                    </label>
+
+                    <input
+                      id="gst-interest"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={
+                        gstOnInterest
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setGstOnInterest(
+                          event.target
+                            .value
+                        )
+                      }
+                      placeholder="e.g. 432"
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="emi-other-fees"
+                      className="mb-2 block text-sm font-semibold"
+                    >
+                      Other EMI fees
+                    </label>
+
+                    <input
+                      id="emi-other-fees"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={
+                        emiOtherFees
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setEmiOtherFees(
+                          event.target
+                            .value
+                        )
+                      }
+                      placeholder="Optional"
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="emi-number"
+                      className="mb-2 block text-sm font-semibold"
+                    >
+                      EMI number
+                    </label>
+
+                    <input
+                      id="emi-number"
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={
+                        emiNumber
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setEmiNumber(
+                          event.target
+                            .value
+                        )
+                      }
+                      placeholder="e.g. 1"
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="total-emis"
+                      className="mb-2 block text-sm font-semibold"
+                    >
+                      Total EMIs
+                    </label>
+
+                    <input
+                      id="total-emis"
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={
+                        totalEmis
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setTotalEmis(
+                          event.target
+                            .value
+                        )
+                      }
+                      placeholder="e.g. 6"
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="emi-total-payable"
+                      className="mb-2 block text-sm font-semibold"
+                    >
+                      Total EMI payable
+                    </label>
+
+                    <input
+                      id="emi-total-payable"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={
+                        emiTotalPayable
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setEmiTotalPayable(
+                          event.target
+                            .value
+                        )
+                      }
+                      placeholder="e.g. 63400"
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="emi-start-date"
+                      className="mb-2 block text-sm font-semibold"
+                    >
+                      EMI start date
+                    </label>
+
+                    <input
+                      id="emi-start-date"
+                      type="date"
+                      value={
+                        emiStartDate
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setEmiStartDate(
+                          event.target
+                            .value
+                        )
+                      }
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="emi-end-date"
+                      className="mb-2 block text-sm font-semibold"
+                    >
+                      EMI end date
+                    </label>
+
+                    <input
+                      id="emi-end-date"
+                      type="date"
+                      value={
+                        emiEndDate
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setEmiEndDate(
+                          event.target
+                            .value
+                        )
+                      }
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label
+                htmlFor="notes"
+                className="mb-2 block text-sm font-semibold"
+              >
+                Notes
+                <span className="ml-2 font-normal text-[var(--muted)]">
+                  Optional
+                </span>
+              </label>
+
+              <input
+                id="notes"
+                type="text"
+                value={
+                  notes
+                }
+                onChange={(
+                  event
+                ) =>
+                  setNotes(
+                    event.target
+                      .value
+                  )
+                }
+                placeholder="Optional note"
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
+              />
+            </div>
+
+            {/* Error */}
             {error && (
               <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
                 {error}
@@ -3084,6 +5741,7 @@ export default function SpendPage() {
               </div>
             )}
 
+            {/* Actions */}
             <div className="flex flex-col-reverse gap-3 border-t border-[var(--border)] pt-5 sm:flex-row sm:justify-end">
               {editingTransactionId && (
                 <button
@@ -3110,25 +5768,25 @@ export default function SpendPage() {
                 {saving
                   ? editingTransactionId
                     ? "Saving changes..."
-                    : "Saving purchase..."
+                    : "Saving transaction..."
                   : editingTransactionId
                     ? "Save changes"
-                    : "Record purchase"}
+                    : "Record transaction"}
               </button>
             </div>
           </form>
         </section>
 
-        {/* Recent Purchases */}
+        {/* Recent Transactions */}
         <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm sm:p-8">
           <div className="mb-6">
             <h2 className="text-lg font-semibold">
-              Recent purchases
+              Recent transactions
             </h2>
 
             <p className="mt-1 text-sm text-[var(--muted)]">
-              Your latest purchases in the{" "}
-              {activeProfile.name} profile.
+              Your latest transactions in the{" "}
+              {profile.name} profile.
             </p>
           </div>
 
@@ -3136,12 +5794,11 @@ export default function SpendPage() {
           0 ? (
             <div className="rounded-xl border border-dashed border-[var(--border)] p-8 text-center">
               <p className="text-sm font-medium">
-                No purchases recorded yet.
+                No transactions recorded yet.
               </p>
 
               <p className="mt-2 text-xs text-[var(--muted)]">
-                Record a purchase or import a statement above to start building
-                your spending history.
+                Record a transaction or import a statement above.
               </p>
             </div>
           ) : (
@@ -3149,142 +5806,224 @@ export default function SpendPage() {
               {transactions.map(
                 (
                   transaction
-                ) => (
-                  <div
-                    key={
-                      transaction.id
-                    }
-                    className="rounded-xl border border-[var(--border)] p-4"
-                  >
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="truncate text-sm font-semibold">
-                            {
-                              transaction.merchant
-                            }
-                          </h3>
+                ) => {
+                  const emiLabel =
+                    getEmiLabel(
+                      transaction.emi_status
+                    );
 
-                          {transaction.source_type &&
-                            transaction.source_type !==
-                              "manual" && (
+                  const isRefundOrReversal =
+                    transaction.transaction_type ===
+                      "refund" ||
+                    transaction.transaction_type ===
+                      "reversal";
+
+                  return (
+                    <div
+                      key={
+                        transaction.id
+                      }
+                      className="rounded-xl border border-[var(--border)] p-4"
+                    >
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="truncate text-sm font-semibold">
+                              {
+                                transaction.merchant
+                              }
+                            </h3>
+
+                            {transaction.source_type &&
+                              transaction.source_type !==
+                                "manual" && (
+                                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                  {transaction.source_type
+                                    .replace(
+                                      "statement_",
+                                      ""
+                                    )
+                                    .replace(
+                                      "_",
+                                      " "
+                                    )}
+                                </span>
+                              )}
+
+                            {emiLabel && (
                               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                                {transaction.source_type
-                                  .replace(
-                                    "statement_",
-                                    ""
-                                  )
-                                  .replace(
-                                    "_",
-                                    " "
-                                  )}
+                                {
+                                  emiLabel
+                                }
                               </span>
                             )}
-                        </div>
 
-                        <p className="mt-1 text-xs text-[var(--muted)]">
-                          {
-                            transaction.category
-                          }{" "}
-                          ·{" "}
-                          {getCardName(
-                            transaction
-                          )}
-                        </p>
+                            {isRefundOrReversal && (
+                              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                                {
+                                  getTransactionTypeLabel(
+                                    transaction.transaction_type
+                                  )
+                                }
+                              </span>
+                            )}
+                          </div>
 
-                        <p className="mt-1 text-xs text-[var(--muted)]">
-                          {
-                            transaction.transaction_date
-                          }
-                        </p>
-
-                        {transaction.notes && (
-                          <p className="mt-2 text-xs text-[var(--muted)]">
+                          <p className="mt-1 text-xs text-[var(--muted)]">
                             {
-                              transaction.notes
-                            }
+                              transaction.category
+                            }{" "}
+                            ·{" "}
+                            {getCardName(
+                              transaction
+                            )}
                           </p>
-                        )}
 
-                        {transaction.mcc && (
-                          <p className="mt-2 text-[11px] text-[var(--muted)]">
-                            MCC{" "}
+                          <p className="mt-1 text-xs text-[var(--muted)]">
                             {
-                              transaction.mcc
+                              transaction.transaction_date
                             }
-                            {transaction.mcc_description
-                              ? ` · ${transaction.mcc_description}`
+
+                            {transaction.payment_route
+                              ? ` · ${transaction.payment_route}`
                               : ""}
                           </p>
-                        )}
-                      </div>
 
-                      <div className="flex items-center gap-3">
-                        <p className="shrink-0 text-base font-semibold">
-                          {formatAmount(
-                            Number(
-                              transaction.amount
-                            )
+                          {transaction.mcc && (
+                            <p className="mt-2 text-[11px] text-[var(--muted)]">
+                              MCC{" "}
+                              {
+                                transaction.mcc
+                              }
+                              {transaction.mcc_description
+                                ? ` · ${transaction.mcc_description}`
+                                : ""}
+                            </p>
                           )}
-                        </p>
 
-                        <div className="relative">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setOpenMenuId(
-                                openMenuId ===
-                                  transaction.id
-                                  ? null
-                                  : transaction.id
-                              )
-                            }
-                            className="flex h-9 w-9 items-center justify-center rounded-lg text-lg text-[var(--muted)] transition hover:bg-slate-100 hover:text-[var(--foreground)] dark:hover:bg-slate-800"
-                            aria-label={`Options for ${transaction.merchant}`}
+                          {transaction.emi_status &&
+                            transaction.emi_status !==
+                              "regular" && (
+                              <div className="mt-2 text-[11px] text-[var(--muted)]">
+                                {transaction.emi_principal !=
+                                null
+                                  ? `Principal ${formatAmount(
+                                      Number(
+                                        transaction.emi_principal
+                                      )
+                                    )}`
+                                  : ""}
+
+                                {transaction.emi_number !=
+                                    null &&
+                                  transaction.total_emis !=
+                                    null
+                                  ? ` · EMI ${transaction.emi_number}/${transaction.total_emis}`
+                                  : ""}
+
+                                {transaction.emi_interest !=
+                                null
+                                  ? ` · Interest ${formatAmount(
+                                      Number(
+                                        transaction.emi_interest
+                                      )
+                                    )}`
+                                  : ""}
+                              </div>
+                            )}
+
+                          {transaction.original_transaction_id && (
+                            <p className="mt-2 text-[11px] text-[var(--muted)]">
+                              Linked to original transaction
+                            </p>
+                          )}
+
+                          {transaction.notes && (
+                            <p className="mt-2 text-xs text-[var(--muted)]">
+                              {
+                                transaction.notes
+                              }
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <p
+                            className={`shrink-0 text-base font-semibold ${
+                              isRefundOrReversal
+                                ? "text-amber-700 dark:text-amber-300"
+                                : ""
+                            }`}
                           >
-                            ⋮
-                          </button>
+                            {isRefundOrReversal
+                              ? "−"
+                              : ""}
 
-                          {openMenuId ===
-                            transaction.id && (
-                            <div className="absolute right-0 top-10 z-20 w-44 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] p-1 shadow-lg">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleEditTransaction(
-                                    transaction
-                                  )
-                                }
-                                className="block w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium transition hover:bg-slate-100 dark:hover:bg-slate-800"
-                              >
-                                Edit purchase
-                              </button>
+                            {formatAmount(
+                              Number(
+                                transaction.amount
+                              )
+                            )}
+                          </p>
 
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleDeleteTransaction(
-                                    transaction
-                                  )
-                                }
-                                disabled={
-                                  deletingTransactionId ===
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setOpenMenuId(
+                                  openMenuId ===
+                                    transaction.id
+                                    ? null
+                                    : transaction.id
+                                )
+                              }
+                              className="flex h-9 w-9 items-center justify-center rounded-lg text-lg text-[var(--muted)] transition hover:bg-slate-100 hover:text-[var(--foreground)] dark:hover:bg-slate-800"
+                              aria-label={`Options for ${transaction.merchant}`}
+                            >
+                              ⋮
+                            </button>
+
+                            {openMenuId ===
+                              transaction.id && (
+                              <div className="absolute right-0 top-10 z-20 w-44 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] p-1 shadow-lg">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleEditTransaction(
+                                      transaction
+                                    )
+                                  }
+                                  className="block w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium transition hover:bg-slate-100 dark:hover:bg-slate-800"
+                                >
+                                  Edit transaction
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleDeleteTransaction(
+                                      transaction
+                                    )
+                                  }
+                                  disabled={
+                                    deletingTransactionId ===
+                                    transaction.id
+                                  }
+                                  className="block w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-red-950/30"
+                                >
+                                  {deletingTransactionId ===
                                   transaction.id
-                                }
-                                className="block w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-red-950/30"
-                              >
-                                {deletingTransactionId ===
-                                transaction.id
-                                  ? "Deleting..."
-                                  : "Delete purchase"}
-                              </button>
-                            </div>
-                          )}
+                                    ? "Deleting..."
+                                    : "Delete transaction"}
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                )
+                  );
+                }
               )}
             </div>
           )}
@@ -3304,4 +6043,51 @@ export default function SpendPage() {
       </div>
     </main>
   );
+}
+
+function getDateOffset(
+  dateString: string,
+  days: number
+): string {
+  const date =
+    new Date(
+      `${dateString}T00:00:00`
+    );
+
+  date.setDate(
+    date.getDate() + days
+  );
+
+  return `${date.getFullYear()}-${String(
+    date.getMonth() + 1
+  ).padStart(
+    2,
+    "0"
+  )}-${String(
+    date.getDate()
+  ).padStart(
+    2,
+    "0"
+  )}`;
+}
+
+function formatCurrencyValue(
+  value: number
+): string {
+  try {
+    return new Intl.NumberFormat(
+      "en-IN",
+      {
+        style:
+          "currency",
+        currency:
+          "INR",
+        maximumFractionDigits: 2,
+      }
+    ).format(value);
+  } catch {
+    return `₹${value.toFixed(
+      2
+    )}`;
+  }
 }
