@@ -1038,33 +1038,65 @@ const MONTHS = [
   { value: "12", label: "December" },
 ];
 
+function formatMoney(
+  value: number | null,
+  currency: string
+) {
+  if (value === null) {
+    return "";
+  }
+
+  try {
+    return new Intl.NumberFormat(
+      undefined,
+      {
+        style: "currency",
+        currency,
+        maximumFractionDigits: 2,
+      }
+    ).format(value);
+  } catch {
+    return `${currency} ${value.toFixed(2)}`;
+  }
+}
+
 function AddCardForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const editCardId = searchParams.get("edit");
-  const isEditMode = Boolean(editCardId);
+  const editCardId =
+    searchParams.get("edit");
+
+  const isEditMode =
+    Boolean(editCardId);
 
   const {
     activeProfile,
     loadingProfiles,
   } = useCardIQProfile();
 
-  const [bank, setBank] = useState("");
+  const [bank, setBank] =
+    useState("");
+
   const [manualBank, setManualBank] =
     useState("");
 
   const [cardName, setCardName] =
     useState("");
+
   const [manualCardName, setManualCardName] =
     useState("");
 
   const [variant, setVariant] =
     useState("");
+
   const [manualVariant, setManualVariant] =
     useState("");
 
   const [network, setNetwork] =
+    useState("");
+
+  const [cardLastFour, setCardLastFour] =
     useState("");
 
   const [isLifetimeFree, setIsLifetimeFree] =
@@ -1110,7 +1142,8 @@ function AddCardForm() {
   const selectedBank = useMemo(
     () =>
       BANKS.find(
-        (item) => item.name === bank
+        (item) =>
+          item.name === bank
       ),
     [bank]
   );
@@ -1164,12 +1197,10 @@ function AddCardForm() {
       currentYear - index
   );
 
-  const hasFeeDefaults =
-    Boolean(
-      defaultAnnualFee ||
-        defaultAnnualFeeWaiverThreshold
-    );
-
+  /*
+   * Finds an exact variant fee rule first,
+   * then falls back to a generic card rule.
+   */
   const findMatchingFeeRule = (
     rules: FeeRule[],
     selectedVariantName: string
@@ -1188,23 +1219,24 @@ function AddCardForm() {
     return (
       rules.find(
         (rule) =>
-          rule.variant ===
-          null
+          rule.variant === null
       ) ?? null
     );
   };
 
+  /*
+   * Load issuer fee information.
+   */
   const loadFeeRule = async (
-    supabase: ReturnType<
-      typeof createClient
-    >,
     selectedBankName: string,
     selectedCardName: string,
     selectedVariantName: string,
-    userId?: string,
-    profileId?: string
+    applyDefaults: boolean
   ) => {
     setLoadingFeeRule(true);
+
+    const supabase =
+      createClient();
 
     const {
       data,
@@ -1273,30 +1305,22 @@ function AddCardForm() {
       issuerWaiver
     );
 
-    /*
-     * In add mode, use issuer defaults as the
-     * initial user-visible values.
-     */
-    if (!userId || !profileId) {
-      if (
-        !isLifetimeFree
-      ) {
-        setAnnualFee(
-          issuerFee
-        );
+    if (applyDefaults) {
+      setAnnualFee(
+        issuerFee
+      );
 
-        setAnnualFeeWaiverThreshold(
-          issuerWaiver
-        );
-      }
-
-      setLoadingFeeRule(false);
-      return;
+      setAnnualFeeWaiverThreshold(
+        issuerWaiver
+      );
     }
 
     setLoadingFeeRule(false);
   };
 
+  /*
+   * Load existing card and user-specific settings.
+   */
   useEffect(() => {
     const loadCard = async () => {
       if (loadingProfiles) {
@@ -1309,6 +1333,15 @@ function AddCardForm() {
         setError(
           "No active profile is available."
         );
+        setLoadingCard(false);
+        return;
+      }
+
+      /*
+       * Add mode: nothing to load.
+       * Fee defaults are loaded after selections.
+       */
+      if (!editCardId) {
         setLoadingCard(false);
         return;
       }
@@ -1326,17 +1359,6 @@ function AddCardForm() {
         return;
       }
 
-      /*
-       * Add mode.
-       *
-       * There is no existing card to load, so the
-       * issuer defaults are populated after selection.
-       */
-      if (!editCardId) {
-        setLoadingCard(false);
-        return;
-      }
-
       const {
         data: card,
         error: cardError,
@@ -1344,7 +1366,7 @@ function AddCardForm() {
         await supabase
           .from("cards")
           .select(
-            "id, name, bank, network, variant, profile_id"
+            "id, name, bank, network, variant, card_last_four, profile_id"
           )
           .eq(
             "id",
@@ -1375,11 +1397,14 @@ function AddCardForm() {
         return;
       }
 
-      setNetwork(card.network);
+      setNetwork(
+        card.network
+      );
 
-      /*
-       * Load the user's card settings.
-       */
+      setCardLastFour(
+        card.card_last_four ?? ""
+      );
+
       const {
         data: cardSettings,
         error:
@@ -1436,23 +1461,37 @@ function AddCardForm() {
             : ""
         );
 
-        setAnnualFee(
+        /*
+         * User overrides are loaded here.
+         *
+         * If the override is NULL, the fee-rule effect
+         * below will populate the issuer default.
+         */
+        if (
           cardSettings.annual_fee_override !=
-            null
-            ? String(
-                cardSettings.annual_fee_override
-              )
-            : ""
-        );
+          null
+        ) {
+          setAnnualFee(
+            String(
+              cardSettings.annual_fee_override
+            )
+          );
+        } else {
+          setAnnualFee("");
+        }
 
-        setAnnualFeeWaiverThreshold(
+        if (
           cardSettings.annual_fee_waiver_threshold !=
-            null
-            ? String(
-                cardSettings.annual_fee_waiver_threshold
-              )
-            : ""
-        );
+          null
+        ) {
+          setAnnualFeeWaiverThreshold(
+            String(
+              cardSettings.annual_fee_waiver_threshold
+            )
+          );
+        } else {
+          setAnnualFeeWaiverThreshold("");
+        }
       } else {
         setIsLifetimeFree(false);
         setAnniversaryMonth("");
@@ -1542,54 +1581,12 @@ function AddCardForm() {
   ]);
 
   /*
-   * Load issuer defaults whenever the user has
-   * selected a supported bank/card/variant in add mode.
-   */
-  useEffect(() => {
-    if (
-      loadingProfiles ||
-      isEditMode ||
-      !activeProfile?.id ||
-      !bank ||
-      isManualBank ||
-      !cardName ||
-      isManualCard ||
-      !variant ||
-      isManualVariant
-    ) {
-      return;
-    }
-
-    const loadDefaults = async () => {
-      const supabase =
-        createClient();
-
-      await loadFeeRule(
-        supabase,
-        bank,
-        cardName,
-        variant
-      );
-    };
-
-    loadDefaults();
-  }, [
-    activeProfile?.id,
-    bank,
-    cardName,
-    variant,
-    isEditMode,
-    isManualBank,
-    isManualCard,
-    isManualVariant,
-    loadingProfiles,
-  ]);
-
-  /*
-   * For edit mode, load the issuer default after
-   * the existing card has been loaded into state.
+   * Edit mode:
    *
-   * User overrides remain untouched.
+   * Once the existing card selections are known,
+   * load the issuer defaults.
+   *
+   * Existing user overrides are preserved.
    */
   useEffect(() => {
     if (
@@ -1606,74 +1603,149 @@ function AddCardForm() {
       return;
     }
 
-    const loadEditDefaults = async () => {
-      const supabase =
-        createClient();
+    const loadEditDefaults =
+      async () => {
+        const supabase =
+          createClient();
 
-      const {
-        data,
-        error: feeError,
-      } =
-        await supabase
-          .from("card_fee_rules")
-          .select(
-            "id, bank, card_name, variant, fee_type, fee_amount, fee_currency, waiver_threshold, waiver_period, waiver_description, applies_to_emi, source_name, source_url, verified_at"
-          )
-          .eq(
-            "bank",
-            bank
-          )
-          .eq(
-            "card_name",
-            cardName
-          )
-          .eq(
-            "fee_type",
-            "renewal"
+        const {
+          data,
+          error: feeError,
+        } =
+          await supabase
+            .from(
+              "card_fee_rules"
+            )
+            .select(
+              "id, bank, card_name, variant, fee_type, fee_amount, fee_currency, waiver_threshold, waiver_period, waiver_description, applies_to_emi, source_name, source_url, verified_at"
+            )
+            .eq(
+              "bank",
+              bank
+            )
+            .eq(
+              "card_name",
+              cardName
+            )
+            .eq(
+              "fee_type",
+              "renewal"
+            );
+
+        if (feeError) {
+          console.error(
+            "Card fee rule load error:",
+            feeError
+          );
+          return;
+        }
+
+        const matchingRule =
+          findMatchingFeeRule(
+            (data ?? []) as FeeRule[],
+            variant
           );
 
-      if (feeError) {
-        console.error(
-          "Card fee rule load error:",
-          feeError
-        );
-        return;
-      }
-
-      const matchingRule =
-        findMatchingFeeRule(
-          (data ?? []) as FeeRule[],
-          variant
+        setFeeRule(
+          matchingRule
         );
 
-      if (!matchingRule) {
-        setFeeRule(null);
-        setDefaultAnnualFee("");
-        setDefaultAnnualFeeWaiverThreshold("");
-        return;
-      }
+        if (!matchingRule) {
+          setDefaultAnnualFee("");
+          setDefaultAnnualFeeWaiverThreshold(
+            ""
+          );
+          return;
+        }
 
-      setFeeRule(
-        matchingRule
-      );
+        const issuerFee =
+          String(
+            matchingRule.fee_amount
+          );
 
-      setDefaultAnnualFee(
-        String(
-          matchingRule.fee_amount
-        )
-      );
-
-      setDefaultAnnualFeeWaiverThreshold(
-        matchingRule.waiver_threshold !=
+        const issuerWaiver =
+          matchingRule.waiver_threshold !=
           null
-          ? String(
-              matchingRule.waiver_threshold
-            )
-          : ""
-      );
-    };
+            ? String(
+                matchingRule.waiver_threshold
+              )
+            : "";
+
+        setDefaultAnnualFee(
+          issuerFee
+        );
+
+        setDefaultAnnualFeeWaiverThreshold(
+          issuerWaiver
+        );
+
+        /*
+         * Only populate visible values when they are
+         * currently blank.
+         *
+         * This preserves user-specific overrides.
+         */
+        if (!annualFee) {
+          setAnnualFee(
+            issuerFee
+          );
+        }
+
+        if (
+          !annualFeeWaiverThreshold
+        ) {
+          setAnnualFeeWaiverThreshold(
+            issuerWaiver
+          );
+        }
+      };
 
     loadEditDefaults();
+  }, [
+    activeProfile?.id,
+    bank,
+    cardName,
+    variant,
+    isEditMode,
+    isManualBank,
+    isManualCard,
+    isManualVariant,
+    loadingProfiles,
+    annualFee,
+    annualFeeWaiverThreshold,
+  ]);
+
+  /*
+   * Add mode:
+   * load issuer defaults after a complete
+   * catalogue selection.
+   */
+  useEffect(() => {
+    if (
+      loadingProfiles ||
+      isEditMode ||
+      !activeProfile?.id ||
+      !bank ||
+      isManualBank ||
+      !cardName ||
+      isManualCard ||
+      !variant ||
+      isManualVariant
+    ) {
+      return;
+    }
+
+    const loadAddDefaults =
+      async () => {
+        await loadFeeRule(
+          bank,
+          cardName,
+          variant,
+          true
+        );
+      };
+
+    loadAddDefaults();
   }, [
     activeProfile?.id,
     bank,
@@ -1741,11 +1813,13 @@ function AddCardForm() {
       value === MANUAL_VALUE
     ) {
       setNetwork("");
+
       setFeeRule(null);
       setDefaultAnnualFee("");
       setDefaultAnnualFeeWaiverThreshold("");
       setAnnualFee("");
       setAnnualFeeWaiverThreshold("");
+
       return;
     }
 
@@ -1778,10 +1852,17 @@ function AddCardForm() {
   const handleLifetimeFreeChange = (
     checked: boolean
   ) => {
-    setIsLifetimeFree(checked);
+    setIsLifetimeFree(
+      checked
+    );
+
+    if (checked) {
+      setAnnualFee("");
+      setAnnualFeeWaiverThreshold("");
+      return;
+    }
 
     if (
-      !checked &&
       !annualFee &&
       defaultAnnualFee
     ) {
@@ -1791,7 +1872,6 @@ function AddCardForm() {
     }
 
     if (
-      !checked &&
       !annualFeeWaiverThreshold &&
       defaultAnnualFeeWaiverThreshold
     ) {
@@ -1835,6 +1915,9 @@ function AddCardForm() {
         ? availableNetworks[0]
         : network.trim();
 
+    const normalizedCardLastFour =
+      cardLastFour.trim();
+
     if (!finalBank) {
       setError(
         "Please select or enter a bank / issuer."
@@ -1859,6 +1942,18 @@ function AddCardForm() {
     if (!finalNetwork) {
       setError(
         "Please select or enter the card network."
+      );
+      return;
+    }
+
+    if (
+      normalizedCardLastFour &&
+      !/^\d{4}$/.test(
+        normalizedCardLastFour
+      )
+    ) {
+      setError(
+        "Last 4 digits must contain exactly 4 digits."
       );
       return;
     }
@@ -1957,6 +2052,13 @@ function AddCardForm() {
       return;
     }
 
+    /*
+     * We allow blank fee fields when CardIQ has
+     * no verified issuer default.
+     *
+     * For an LTF card, fee values are deliberately
+     * cleared and stored as NULL.
+     */
     if (
       !isLifetimeFree &&
       defaultAnnualFee &&
@@ -1985,17 +2087,15 @@ function AddCardForm() {
       }
 
       /*
-       * Only store a fee override when the user's
-       * value differs from the issuer default.
-       *
-       * This preserves:
-       * issuer default ≠ user-specific override
+       * Keep issuer defaults separate from
+       * user-specific overrides.
        */
       const feeOverride =
         isLifetimeFree
           ? null
           : defaultAnnualFee &&
-              parsedAnnualFee !== null &&
+              parsedAnnualFee !==
+                null &&
               Number(
                 defaultAnnualFee
               ) ===
@@ -2026,12 +2126,17 @@ function AddCardForm() {
           await supabase
             .from("cards")
             .update({
-              name: finalCardName,
-              bank: finalBank,
+              name:
+                finalCardName,
+              bank:
+                finalBank,
               network:
                 finalNetwork,
               variant:
                 finalVariant,
+              card_last_four:
+                normalizedCardLastFour ||
+                null,
             })
             .eq(
               "id",
@@ -2116,6 +2221,9 @@ function AddCardForm() {
                 finalNetwork,
               variant:
                 finalVariant,
+              card_last_four:
+                normalizedCardLastFour ||
+                null,
             })
             .select("id")
             .single();
@@ -2125,8 +2233,7 @@ function AddCardForm() {
         }
 
         const {
-          error:
-            settingsError,
+          error: settingsError,
         } =
           await supabase
             .from(
@@ -2246,7 +2353,6 @@ function AddCardForm() {
       <CardIQHeader />
 
       <div className="mx-auto max-w-3xl px-5 py-8 lg:px-8 lg:py-12">
-        {/* Header */}
         <div className="mb-8">
           <button
             type="button"
@@ -2308,7 +2414,6 @@ function AddCardForm() {
           </div>
         </div>
 
-        {/* Form */}
         <form
           onSubmit={handleSubmit}
           className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm sm:p-8"
@@ -2402,7 +2507,7 @@ function AddCardForm() {
               )}
             </div>
 
-            {/* Card Name */}
+            {/* Card name */}
             <div>
               <label
                 htmlFor="cardName"
@@ -2489,11 +2594,6 @@ function AddCardForm() {
                       setVariant("");
                       setManualVariant("");
                       setNetwork("");
-                      setFeeRule(null);
-                      setDefaultAnnualFee("");
-                      setDefaultAnnualFeeWaiverThreshold("");
-                      setAnnualFee("");
-                      setAnnualFeeWaiverThreshold("");
                     }}
                     className="mt-2 text-xs font-semibold text-[var(--muted)] hover:text-[var(--foreground)]"
                   >
@@ -2503,7 +2603,7 @@ function AddCardForm() {
               )}
             </div>
 
-            {/* Card Variant */}
+            {/* Card variant */}
             <div>
               <label
                 htmlFor="variant"
@@ -2588,11 +2688,6 @@ function AddCardForm() {
                       setVariant("");
                       setManualVariant("");
                       setNetwork("");
-                      setFeeRule(null);
-                      setDefaultAnnualFee("");
-                      setDefaultAnnualFeeWaiverThreshold("");
-                      setAnnualFee("");
-                      setAnnualFeeWaiverThreshold("");
                     }}
                     className="mt-2 text-xs font-semibold text-[var(--muted)] hover:text-[var(--foreground)]"
                   >
@@ -2696,7 +2791,48 @@ function AddCardForm() {
               </div>
             )}
 
-            {/* Card Economics */}
+            {/* Last 4 digits */}
+            <div>
+              <label
+                htmlFor="card-last-four"
+                className="mb-2 block text-sm font-semibold"
+              >
+                Last 4 digits of card
+              </label>
+
+              <input
+                id="card-last-four"
+                type="text"
+                inputMode="numeric"
+                maxLength={4}
+                pattern="[0-9]{4}"
+                value={
+                  cardLastFour
+                }
+                onChange={(event) =>
+                  setCardLastFour(
+                    event.target.value
+                      .replace(
+                        /\D/g,
+                        ""
+                      )
+                      .slice(
+                        0,
+                        4
+                      )
+                  )
+                }
+                placeholder="e.g. 1234"
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm tracking-widest text-[var(--foreground)] outline-none placeholder:tracking-normal placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
+              />
+
+              <p className="mt-2 text-xs text-[var(--muted)]">
+                Only the last four digits are stored. Never enter your full card
+                number.
+              </p>
+            </div>
+
+            {/* Card economics */}
             <div className="border-t border-[var(--border)] pt-6">
               <div className="mb-5">
                 <p className="text-sm font-semibold">
@@ -2709,7 +2845,7 @@ function AddCardForm() {
                 </p>
               </div>
 
-              {/* Lifetime Free */}
+              {/* LTF */}
               <div className="rounded-xl border border-[var(--border)] bg-[var(--card-muted)] p-4">
                 <label className="flex cursor-pointer items-start gap-3">
                   <input
@@ -2860,27 +2996,31 @@ function AddCardForm() {
                     className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:focus:border-slate-500 dark:focus:ring-slate-700 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
                   />
 
-                  {feeRule &&
-                    defaultAnnualFee && (
-                      <p className="mt-2 text-xs text-[var(--muted)]">
-                        Issuer default:{" "}
-                        {feeRule.fee_currency}{" "}
-                        {
-                          defaultAnnualFee
-                        }
-                        {feeRule.waiver_description &&
-                          ` · ${feeRule.waiver_description}`}
-                      </p>
-                    )}
-
-                  {!feeRule &&
-                    !loadingFeeRule &&
-                    !isManualVariant && (
-                      <p className="mt-2 text-xs text-[var(--muted)]">
-                        No verified issuer fee rule is currently available for
-                        this card. You can enter your own card-specific value.
-                      </p>
-                    )}
+                  {isLifetimeFree ? (
+                    <p className="mt-2 text-xs font-medium text-[var(--muted)]">
+                      Not applicable — Lifetime Free
+                    </p>
+                  ) : feeRule &&
+                    defaultAnnualFee ? (
+                    <p className="mt-2 text-xs text-[var(--muted)]">
+                      Issuer default:{" "}
+                      {
+                        feeRule.fee_currency
+                      }{" "}
+                      {
+                        defaultAnnualFee
+                      }
+                      {feeRule.waiver_description
+                        ? ` · ${feeRule.waiver_description}`
+                        : ""}
+                    </p>
+                  ) : !loadingFeeRule &&
+                    !isManualVariant ? (
+                    <p className="mt-2 text-xs text-[var(--muted)]">
+                      No verified issuer fee rule is currently available for
+                      this card. You can enter your card-specific value.
+                    </p>
+                  ) : null}
                 </div>
 
                 {/* Waiver threshold */}
@@ -2919,33 +3059,34 @@ function AddCardForm() {
                     className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:focus:border-slate-500 dark:focus:ring-slate-700 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
                   />
 
-                  {feeRule &&
-                    defaultAnnualFeeWaiverThreshold && (
-                      <p className="mt-2 text-xs text-[var(--muted)]">
-                        Issuer default:{" "}
-                        {
-                          defaultAnnualFeeWaiverThreshold
-                        }{" "}
-                        {
-                          activeProfile.currency_code
-                        }
-                        {feeRule.waiver_period
-                          ? ` · ${feeRule.waiver_period.replace(
-                              "_",
-                              " "
-                            )}`
-                          : ""}
-                      </p>
-                    )}
-
-                  {!feeRule &&
-                    !loadingFeeRule &&
-                    !isManualVariant && (
-                      <p className="mt-2 text-xs text-[var(--muted)]">
-                        No verified issuer waiver threshold is currently
-                        available for this card.
-                      </p>
-                    )}
+                  {isLifetimeFree ? (
+                    <p className="mt-2 text-xs font-medium text-[var(--muted)]">
+                      Not applicable — Lifetime Free
+                    </p>
+                  ) : feeRule &&
+                    defaultAnnualFeeWaiverThreshold ? (
+                    <p className="mt-2 text-xs text-[var(--muted)]">
+                      Issuer default:{" "}
+                      {
+                        defaultAnnualFeeWaiverThreshold
+                      }{" "}
+                      {
+                        activeProfile.currency_code
+                      }
+                      {feeRule.waiver_period
+                        ? ` · ${feeRule.waiver_period.replace(
+                            "_",
+                            " "
+                          )}`
+                        : ""}
+                    </p>
+                  ) : !loadingFeeRule &&
+                    !isManualVariant ? (
+                    <p className="mt-2 text-xs text-[var(--muted)]">
+                      No verified issuer waiver threshold is currently
+                      available for this card.
+                    </p>
+                  ) : null}
                 </div>
               </div>
             </div>
