@@ -1006,6 +1006,21 @@ const FALLBACK_NETWORKS = [
   "Other",
 ];
 
+const MONTHS = [
+  { value: 1, label: "January" },
+  { value: 2, label: "February" },
+  { value: 3, label: "March" },
+  { value: 4, label: "April" },
+  { value: 5, label: "May" },
+  { value: 6, label: "June" },
+  { value: 7, label: "July" },
+  { value: 8, label: "August" },
+  { value: 9, label: "September" },
+  { value: 10, label: "October" },
+  { value: 11, label: "November" },
+  { value: 12, label: "December" },
+];
+
 function AddCardForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1038,7 +1053,10 @@ function AddCardForm() {
   const [isLifetimeFree, setIsLifetimeFree] =
     useState(false);
 
-  const [anniversaryDate, setAnniversaryDate] =
+  const [anniversaryMonth, setAnniversaryMonth] =
+    useState("");
+
+  const [anniversaryYear, setAnniversaryYear] =
     useState("");
 
   const [annualFee, setAnnualFee] =
@@ -1106,6 +1124,15 @@ function AddCardForm() {
     !isManualVariant &&
     availableNetworks.length === 1;
 
+  const currentYear =
+    new Date().getFullYear();
+
+  const yearOptions = Array.from(
+    { length: 15 },
+    (_, index) =>
+      currentYear + 1 - index
+  );
+
   useEffect(() => {
     const loadCard = async () => {
       if (loadingProfiles) {
@@ -1122,9 +1149,6 @@ function AddCardForm() {
         return;
       }
 
-      /*
-       * Add mode
-       */
       if (!editCardId) {
         setLoadingCard(false);
         return;
@@ -1179,9 +1203,6 @@ function AddCardForm() {
 
       setNetwork(card.network);
 
-      /*
-       * Load card-specific economics settings.
-       */
       const {
         data: cardSettings,
         error: cardSettingsError,
@@ -1191,7 +1212,7 @@ function AddCardForm() {
             "card_account_settings"
           )
           .select(
-            "is_lifetime_free, anniversary_date, annual_fee_override, annual_fee_currency, annual_fee_waiver_threshold"
+            "is_lifetime_free, anniversary_month, anniversary_year, annual_fee_override, annual_fee_currency, annual_fee_waiver_threshold"
           )
           .eq(
             "card_id",
@@ -1219,9 +1240,22 @@ function AddCardForm() {
           cardSettings.is_lifetime_free
         );
 
-        setAnniversaryDate(
-          cardSettings.anniversary_date ??
-            ""
+        setAnniversaryMonth(
+          cardSettings.anniversary_month !=
+            null
+            ? String(
+                cardSettings.anniversary_month
+              )
+            : ""
+        );
+
+        setAnniversaryYear(
+          cardSettings.anniversary_year !=
+            null
+            ? String(
+                cardSettings.anniversary_year
+              )
+            : ""
         );
 
         setAnnualFee(
@@ -1243,7 +1277,8 @@ function AddCardForm() {
         );
       } else {
         setIsLifetimeFree(false);
-        setAnniversaryDate("");
+        setAnniversaryMonth("");
+        setAnniversaryYear("");
         setAnnualFee("");
         setAnnualFeeWaiverThreshold("");
       }
@@ -1260,7 +1295,9 @@ function AddCardForm() {
         setManualBank(card.bank);
 
         setCardName(MANUAL_VALUE);
-        setManualCardName(card.name);
+        setManualCardName(
+          card.name
+        );
 
         setVariant(MANUAL_VALUE);
         setManualVariant(
@@ -1462,6 +1499,20 @@ function AddCardForm() {
       return;
     }
 
+    const parsedAnniversaryMonth =
+      anniversaryMonth.trim()
+        ? Number(
+            anniversaryMonth
+          )
+        : null;
+
+    const parsedAnniversaryYear =
+      anniversaryYear.trim()
+        ? Number(
+            anniversaryYear
+          )
+        : null;
+
     const parsedAnnualFee =
       annualFee.trim()
         ? Number(annualFee)
@@ -1473,6 +1524,48 @@ function AddCardForm() {
             annualFeeWaiverThreshold
           )
         : null;
+
+    if (
+      parsedAnniversaryMonth !== null &&
+      (!Number.isInteger(
+        parsedAnniversaryMonth
+      ) ||
+        parsedAnniversaryMonth <
+          1 ||
+        parsedAnniversaryMonth >
+          12)
+    ) {
+      setError(
+        "Please select a valid card issue month."
+      );
+      return;
+    }
+
+    if (
+      parsedAnniversaryYear !== null &&
+      (!Number.isInteger(
+        parsedAnniversaryYear
+      ) ||
+        parsedAnniversaryYear <
+          1900)
+    ) {
+      setError(
+        "Please select a valid card issue year."
+      );
+      return;
+    }
+
+    if (
+      (parsedAnniversaryMonth ===
+        null) !==
+      (parsedAnniversaryYear ===
+        null)
+    ) {
+      setError(
+        "Please provide both the card issue month and year."
+      );
+      return;
+    }
 
     if (
       parsedAnnualFee !== null &&
@@ -1565,9 +1658,10 @@ function AddCardForm() {
                   activeProfile.id,
                 is_lifetime_free:
                   isLifetimeFree,
-                anniversary_date:
-                  anniversaryDate ||
-                  null,
+                anniversary_month:
+                  parsedAnniversaryMonth,
+                anniversary_year:
+                  parsedAnniversaryYear,
                 annual_fee_override:
                   isLifetimeFree
                     ? null
@@ -1632,9 +1726,10 @@ function AddCardForm() {
                 activeProfile.id,
               is_lifetime_free:
                 isLifetimeFree,
-              anniversary_date:
-                anniversaryDate ||
-                null,
+              anniversary_month:
+                parsedAnniversaryMonth,
+              anniversary_year:
+                parsedAnniversaryYear,
               annual_fee_override:
                 isLifetimeFree
                   ? null
@@ -1715,7 +1810,7 @@ function AddCardForm() {
   }
 
   return (
-    <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)] text-[var(--foreground)]">
+    <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
       <CardIQHeader />
 
       <div className="mx-auto max-w-3xl px-5 py-8 lg:px-8 lg:py-12">
@@ -2195,32 +2290,96 @@ function AddCardForm() {
               </div>
 
               <div className="mt-5 grid gap-5 md:grid-cols-2">
-                {/* Anniversary */}
+                {/* Issue month */}
                 <div>
                   <label
-                    htmlFor="anniversary-date"
+                    htmlFor="anniversary-month"
                     className="mb-2 block text-sm font-semibold"
                   >
-                    Card anniversary date
+                    Card issue month
                   </label>
 
-                  <input
-                    id="anniversary-date"
-                    type="date"
+                  <select
+                    id="anniversary-month"
                     value={
-                      anniversaryDate
+                      anniversaryMonth
                     }
                     onChange={(event) =>
-                      setAnniversaryDate(
+                      setAnniversaryMonth(
                         event.target
                           .value
                       )
                     }
                     className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
-                  />
+                  >
+                    <option value="">
+                      Select month
+                    </option>
+
+                    {MONTHS.map(
+                      (month) => (
+                        <option
+                          key={
+                            month.value
+                          }
+                          value={
+                            month.value
+                          }
+                        >
+                          {
+                            month.label
+                          }
+                        </option>
+                      )
+                    )}
+                  </select>
 
                   <p className="mt-2 text-xs text-[var(--muted)]">
-                    Used to calculate spending in the card&apos;s anniversary year.
+                    Use the month shown on your card or card documents.
+                  </p>
+                </div>
+
+                {/* Issue year */}
+                <div>
+                  <label
+                    htmlFor="anniversary-year"
+                    className="mb-2 block text-sm font-semibold"
+                  >
+                    Card issue year
+                  </label>
+
+                  <select
+                    id="anniversary-year"
+                    value={
+                      anniversaryYear
+                    }
+                    onChange={(event) =>
+                      setAnniversaryYear(
+                        event.target
+                          .value
+                      )
+                    }
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
+                  >
+                    <option value="">
+                      Select year
+                    </option>
+
+                    {yearOptions.map(
+                      (year) => (
+                        <option
+                          key={year}
+                          value={year}
+                        >
+                          {year}
+                        </option>
+                      )
+                    )}
+                  </select>
+
+                  <p className="mt-2 text-xs text-[var(--muted)]">
+                    CardIQ will use the issue month and year to define the annual
+                    tracking period.
                   </p>
                 </div>
 
@@ -2261,7 +2420,7 @@ function AddCardForm() {
                 </div>
 
                 {/* Waiver threshold */}
-                <div className="md:col-span-2">
+                <div>
                   <label
                     htmlFor="annual-fee-waiver-threshold"
                     className="mb-2 block text-sm font-semibold"
