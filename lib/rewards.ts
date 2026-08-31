@@ -64,6 +64,23 @@ export type RewardCalculationInput = {
   merchant: string;
   transactionDate: string;
 
+  mcc?: number | null;
+  paymentRoute?: string | null;
+
+  emiStatus?:
+    | "regular"
+    | "emi"
+    | "no_cost_emi";
+
+  transactionType?:
+    | "purchase"
+    | "refund"
+    | "reversal"
+    | "fee"
+    | "payment"
+    | "cash_withdrawal"
+    | "other";
+
   card: {
     bank: string;
     name: string;
@@ -93,6 +110,16 @@ export type RewardCalculationResult = {
 
   rewardBucket: string | null;
 
+  rewardCapAmount: number | null;
+
+  rewardCapPeriod:
+    | "transaction"
+    | "month"
+    | "billing_cycle"
+    | null;
+
+  periodKey: string | null;
+
   notes: string[];
 };
 
@@ -103,6 +130,25 @@ export type RewardHistoryTransaction = {
   category: string;
   merchant: string;
   transactionDate: string;
+
+  mcc?: number | null;
+  paymentRoute?: string | null;
+
+  emiStatus?:
+    | "regular"
+    | "emi"
+    | "no_cost_emi";
+
+  transactionType?:
+    | "purchase"
+    | "refund"
+    | "reversal"
+    | "fee"
+    | "payment"
+    | "cash_withdrawal"
+    | "other";
+
+  rewardAdjustmentAmount?: number | null;
 
   card: {
     bank: string;
@@ -124,8 +170,26 @@ export type RewardHistoryResult = {
 
   rewardBucket: string | null;
 
+  rewardCapAmount: number | null;
+
+  rewardCapPeriod:
+    | "transaction"
+    | "month"
+    | "billing_cycle"
+    | null;
+
+  periodKey: string | null;
+
   notes: string[];
 };
+
+function roundReward(
+  value: number
+): number {
+  return Math.round(
+    (value + Number.EPSILON) * 100
+  ) / 100;
+}
 
 function ruleMatchesCard(
   rule: RewardRule,
@@ -323,7 +387,7 @@ function getApplicableRules(
   );
 }
 
-function getApplicablePeriodKey(
+export function getRewardPeriodKey(
   rule: RewardRule,
   transactionDate: string
 ): string | null {
@@ -345,32 +409,25 @@ function getApplicablePeriodKey(
     rule.cap_period ===
     "month"
   ) {
-    const month =
-      transactionDate.slice(
-        0,
-        7
-      );
-
-    return `${rule.reward_bucket}:${month}`;
+    return `${rule.reward_bucket}:${transactionDate.slice(
+      0,
+      7
+    )}`;
   }
 
-  /*
-   * Billing-cycle support needs the actual statement-cycle
-   * boundaries. Until those are available, use the calendar
-   * month as a safe fallback rather than pretending to know
-   * the user's billing cycle.
-   */
   if (
     rule.cap_period ===
     "billing_cycle"
   ) {
-    const month =
-      transactionDate.slice(
-        0,
-        7
-      );
-
-    return `${rule.reward_bucket}:billing:${month}`;
+    /*
+     * Billing-cycle boundaries are not yet stored
+     * on the card, so retain calendar-month behaviour
+     * until billing-cycle support is implemented.
+     */
+    return `${rule.reward_bucket}:billing:${transactionDate.slice(
+      0,
+      7
+    )}`;
   }
 
   return null;
@@ -399,9 +456,6 @@ function selectRewardRule(
     };
   }
 
-  /*
-   * Exclusions always override earning rules.
-   */
   const exclusionRules =
     sortRules(
       applicableRules.filter(
@@ -411,7 +465,8 @@ function selectRewardRule(
     );
 
   if (
-    exclusionRules.length > 0
+    exclusionRules.length >
+    0
   ) {
     return {
       rule: null,
@@ -452,8 +507,63 @@ function selectRewardRule(
 export function calculateReward(
   input: RewardCalculationInput,
   rules: RewardRule[],
-  previouslyEarnedInBucket: number = 0
+  previouslyEarnedInBucket = 0
 ): RewardCalculationResult {
+  const transactionType =
+    input.transactionType ??
+    "purchase";
+
+  /*
+   * Refunds and reversals are handled by the historical
+   * calculation layer, not as independent reward-earning
+   * purchases.
+   */
+  if (
+    transactionType ===
+      "refund" ||
+    transactionType ===
+      "reversal"
+  ) {
+    return {
+      eligible: false,
+      rewardAmount: 0,
+      rewardCurrency: null,
+      rewardRuleId: null,
+      rewardRuleType: null,
+      rewardType: null,
+      rewardBucket: null,
+      rewardCapAmount: null,
+      rewardCapPeriod: null,
+      periodKey: null,
+      notes: [
+        "Refunds and reversals do not generate new rewards.",
+      ],
+    };
+  }
+
+  if (
+    transactionType !==
+      "purchase" &&
+    transactionType !==
+      "other"
+  ) {
+    return {
+      eligible: false,
+      rewardAmount: 0,
+      rewardCurrency: null,
+      rewardRuleId: null,
+      rewardRuleType: null,
+      rewardType: null,
+      rewardBucket: null,
+      rewardCapAmount: null,
+      rewardCapPeriod: null,
+      periodKey: null,
+      notes: [
+        "This transaction type does not earn rewards.",
+      ],
+    };
+  }
+
   if (
     !Number.isFinite(
       input.amount
@@ -468,6 +578,9 @@ export function calculateReward(
       rewardRuleType: null,
       rewardType: null,
       rewardBucket: null,
+      rewardCapAmount: null,
+      rewardCapPeriod: null,
+      periodKey: null,
       notes: [
         "Invalid transaction amount.",
       ],
@@ -484,18 +597,6 @@ export function calculateReward(
     );
 
   if (exclusion) {
-    const notes = [
-      "This transaction matches an excluded spend category or merchant.",
-    ];
-
-    if (
-      exclusion.notes
-    ) {
-      notes.push(
-        exclusion.notes
-      );
-    }
-
     return {
       eligible: false,
       rewardAmount: 0,
@@ -510,7 +611,21 @@ export function calculateReward(
         exclusion.reward_type,
       rewardBucket:
         exclusion.reward_bucket,
-      notes,
+      rewardCapAmount:
+        exclusion.cap_amount,
+      rewardCapPeriod:
+        exclusion.cap_period,
+      periodKey:
+        getRewardPeriodKey(
+          exclusion,
+          input.transactionDate
+        ),
+      notes: [
+        "This transaction matches an excluded spend category or merchant.",
+        ...(exclusion.notes
+          ? [exclusion.notes]
+          : []),
+      ],
     };
   }
 
@@ -523,6 +638,9 @@ export function calculateReward(
       rewardRuleType: null,
       rewardType: null,
       rewardBucket: null,
+      rewardCapAmount: null,
+      rewardCapPeriod: null,
+      periodKey: null,
       notes: [
         "No reward rule is currently configured for this card and transaction.",
       ],
@@ -537,9 +655,12 @@ export function calculateReward(
 
   const notes: string[] = [];
 
-  /*
-   * Transaction-level cap.
-   */
+  const periodKey =
+    getRewardPeriodKey(
+      rule,
+      input.transactionDate
+    );
+
   if (
     rule.cap_period ===
       "transaction" &&
@@ -558,9 +679,6 @@ export function calculateReward(
     }
   }
 
-  /*
-   * Shared month / billing-cycle bucket cap.
-   */
   if (
     (
       rule.cap_period ===
@@ -578,6 +696,15 @@ export function calculateReward(
       );
 
     if (
+      remainingCap <=
+      0
+    ) {
+      rewardAmount = 0;
+
+      notes.push(
+        "Reward bucket has already reached its cap for this period."
+      );
+    } else if (
       rewardAmount >
       remainingCap
     ) {
@@ -588,16 +715,28 @@ export function calculateReward(
         "Shared reward-bucket cap applied."
       );
     }
+  }
 
-    if (
-      remainingCap === 0
-    ) {
-      rewardAmount = 0;
+  if (
+    input.emiStatus ===
+      "emi" ||
+    input.emiStatus ===
+      "no_cost_emi"
+  ) {
+    notes.push(
+      input.emiStatus ===
+        "no_cost_emi"
+        ? "No-Cost EMI transaction."
+        : "EMI transaction."
+    );
+  }
 
-      notes.push(
-        "Reward bucket has already reached its cap for this period."
-      );
-    }
+  if (
+    input.mcc
+  ) {
+    notes.push(
+      `MCC ${input.mcc} was used as transaction metadata.`
+    );
   }
 
   if (
@@ -617,22 +756,6 @@ export function calculateReward(
   }
 
   if (
-    rule.min_spend !== null
-  ) {
-    notes.push(
-      `Minimum eligible spend: ${rule.min_spend}.`
-    );
-  }
-
-  if (
-    rule.max_spend !== null
-  ) {
-    notes.push(
-      `Maximum eligible spend: ${rule.max_spend}.`
-    );
-  }
-
-  if (
     rule.notes
   ) {
     notes.push(
@@ -643,7 +766,10 @@ export function calculateReward(
   return {
     eligible:
       rewardAmount > 0,
-    rewardAmount,
+    rewardAmount:
+      roundReward(
+        rewardAmount
+      ),
     rewardCurrency:
       rule.reward_currency,
     rewardRuleId:
@@ -654,6 +780,11 @@ export function calculateReward(
       rule.reward_type,
     rewardBucket:
       rule.reward_bucket,
+    rewardCapAmount:
+      rule.cap_amount,
+    rewardCapPeriod:
+      rule.cap_period,
+    periodKey,
     notes,
   };
 }
@@ -676,10 +807,108 @@ export function calculateRewardsForTransactions(
       number
     >();
 
-  const results =
-    orderedTransactions.map(
-      (transaction) => {
-        const input: RewardCalculationInput = {
+  const results: RewardHistoryResult[] =
+    [];
+
+  for (
+    const transaction of orderedTransactions
+  ) {
+    const transactionType =
+      transaction.transactionType ??
+      "purchase";
+
+    /*
+     * Refund/reversal:
+     * calculate the reward associated with the original
+     * economics and negate it.
+     *
+     * The caller should provide refund/reversal rows linked
+     * to the original transaction and the reward adjustment
+     * field when available.
+     */
+    if (
+      transactionType ===
+        "refund" ||
+      transactionType ===
+        "reversal"
+    ) {
+      const adjustment =
+        transaction.rewardAdjustmentAmount;
+
+      if (
+        adjustment !==
+          null &&
+        adjustment !==
+          undefined
+      ) {
+        results.push({
+          transactionId:
+            transaction.id,
+
+          eligible:
+            adjustment !==
+            0,
+
+          rewardAmount:
+            roundReward(
+              adjustment
+            ),
+
+          rewardCurrency:
+            null,
+
+          rewardRuleId:
+            null,
+
+          rewardBucket:
+            null,
+
+          rewardCapAmount:
+            null,
+
+          rewardCapPeriod:
+            null,
+
+          periodKey:
+            null,
+
+          notes: [
+            "Reward adjustment from refund or reversal.",
+          ],
+        });
+      } else {
+        results.push({
+          transactionId:
+            transaction.id,
+
+          eligible: false,
+
+          rewardAmount: 0,
+
+          rewardCurrency: null,
+
+          rewardRuleId: null,
+
+          rewardBucket: null,
+
+          rewardCapAmount: null,
+
+          rewardCapPeriod: null,
+
+          periodKey: null,
+
+          notes: [
+            "Refund or reversal. Reward adjustment will be calculated from the linked original transaction.",
+          ],
+        });
+      }
+
+      continue;
+    }
+
+    const calculation =
+      calculateReward(
+        {
           amount:
             transaction.amount,
 
@@ -692,105 +921,119 @@ export function calculateRewardsForTransactions(
           transactionDate:
             transaction.transactionDate,
 
+          mcc:
+            transaction.mcc,
+
+          paymentRoute:
+            transaction.paymentRoute,
+
+          emiStatus:
+            transaction.emiStatus,
+
+          transactionType,
+
           card:
             transaction.card,
-        };
+        },
 
-        const {
-          rule,
-          exclusion,
-        } =
-          selectRewardRule(
-            input,
-            rules
-          );
+        rules,
 
-        if (exclusion) {
-          return {
-            transactionId:
-              transaction.id,
-            eligible: false,
-            rewardAmount: 0,
-            rewardCurrency:
-              exclusion.reward_currency ||
-              null,
-            rewardRuleId:
-              exclusion.id,
-            rewardBucket:
-              exclusion.reward_bucket,
-            notes: [
-              "This transaction matches an excluded spend category or merchant.",
-              ...(exclusion.notes
-                ? [exclusion.notes]
-                : []),
-            ],
-          };
-        }
+        0
+      );
 
-        if (!rule) {
-          return {
-            transactionId:
-              transaction.id,
-            eligible: false,
-            rewardAmount: 0,
-            rewardCurrency: null,
-            rewardRuleId: null,
-            rewardBucket: null,
-            notes: [
-              "No reward rule is currently configured for this card and transaction.",
-            ],
-          };
-        }
+    /*
+     * Recalculate with bucket usage so monthly caps are
+     * respected across the complete historical sequence.
+     */
+    let finalCalculation =
+      calculation;
 
-        const periodKey =
-          getApplicablePeriodKey(
-            rule,
-            transaction.transactionDate
-          );
+    if (
+      calculation.periodKey
+    ) {
+      const previouslyEarned =
+        earnedByPeriod.get(
+          calculation.periodKey
+        ) ?? 0;
 
-        const previouslyEarned =
-          periodKey
-            ? earnedByPeriod.get(
-                periodKey
-              ) ?? 0
-            : 0;
+      finalCalculation =
+        calculateReward(
+          {
+            amount:
+              transaction.amount,
 
-        const calculation =
-          calculateReward(
-            input,
-            rules,
-            previouslyEarned
-          );
+            category:
+              transaction.category,
 
-        if (
-          calculation.eligible &&
-          periodKey
-        ) {
-          earnedByPeriod.set(
-            periodKey,
-            previouslyEarned +
-              calculation.rewardAmount
-          );
-        }
+            merchant:
+              transaction.merchant,
 
-        return {
-          transactionId:
-            transaction.id,
-          eligible:
-            calculation.eligible,
-          rewardAmount:
-            calculation.rewardAmount,
-          rewardCurrency:
-            calculation.rewardCurrency,
-          rewardRuleId:
-            calculation.rewardRuleId,
-          rewardBucket:
-            calculation.rewardBucket,
-          notes:
-            calculation.notes,
-        };
+            transactionDate:
+              transaction.transactionDate,
+
+            mcc:
+              transaction.mcc,
+
+            paymentRoute:
+              transaction.paymentRoute,
+
+            emiStatus:
+              transaction.emiStatus,
+
+            transactionType,
+
+            card:
+              transaction.card,
+          },
+
+          rules,
+
+          previouslyEarned
+        );
+
+      if (
+        finalCalculation.eligible
+      ) {
+        earnedByPeriod.set(
+          calculation.periodKey,
+          previouslyEarned +
+            finalCalculation.rewardAmount
+        );
       }
-    );
+    }
+
+    results.push({
+      transactionId:
+        transaction.id,
+
+      eligible:
+        finalCalculation.eligible,
+
+      rewardAmount:
+        finalCalculation.rewardAmount,
+
+      rewardCurrency:
+        finalCalculation.rewardCurrency,
+
+      rewardRuleId:
+        finalCalculation.rewardRuleId,
+
+      rewardBucket:
+        finalCalculation.rewardBucket,
+
+      rewardCapAmount:
+        finalCalculation.rewardCapAmount,
+
+      rewardCapPeriod:
+        finalCalculation.rewardCapPeriod,
+
+      periodKey:
+        finalCalculation.periodKey,
+
+      notes:
+        finalCalculation.notes,
+    });
+  }
 
   return results;
 }
