@@ -11,6 +11,11 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import CardIQHeader from "@/components/CardIQHeader";
 import { useCardIQProfile } from "@/components/ProfileProvider";
+import {
+  calculateRewardsForTransactions,
+  RewardHistoryTransaction,
+  RewardRule,
+} from "@/lib/rewards";
 
 type Card = {
   id: string;
@@ -19,9 +24,14 @@ type Card = {
   network: string;
   variant: string | null;
   card_last_four: string | null;
-  connection_type: string | null;
-  connection_status: string | null;
-  last_synced_at: string | null;
+};
+
+type CardAccountSettings = {
+  card_id: string;
+  is_lifetime_free: boolean;
+  anniversary_month: number | null;
+  anniversary_year: number | null;
+  annual_fee_waiver_threshold: number | null;
 };
 
 type SpendTransaction = {
@@ -34,96 +44,70 @@ type SpendTransaction = {
   notes: string | null;
   card_id: string | null;
 
-  merchant_raw?: string | null;
-  mcc?: number | null;
-  mcc_description?: string | null;
-  classification_method?: string | null;
-  payment_route?: string | null;
-  transaction_type?: string | null;
-  source_type?: string | null;
-  source_transaction_id?: string | null;
+  mcc: number | null;
+  mcc_description: string | null;
+  classification_method: string | null;
+  payment_route: string | null;
 
-  emi_status?: string | null;
-  emi_principal?: number | null;
-  emi_interest_rate?: number | null;
-  emi_interest?: number | null;
-  emi_processing_fee?: number | null;
-  emi_tax?: number | null;
-  gst_on_processing_fee?: number | null;
-  gst_on_interest?: number | null;
-  emi_other_fees?: number | null;
-  emi_number?: number | null;
-  total_emis?: number | null;
-  emi_total_payable?: number | null;
-  emi_start_date?: string | null;
-  emi_end_date?: string | null;
-  original_transaction_amount?: number | null;
-  total_transaction_cost?: number | null;
+  transaction_type: string | null;
+  source_type: string | null;
+  source_transaction_id: string | null;
 
-  reward_adjustment_amount?: number | null;
-  fee_waiver_adjustment_amount?: number | null;
-  original_transaction_id?: string | null;
-  transaction_fingerprint?: string | null;
+  emi_status: string | null;
+
+  reward_adjustment_amount: number | null;
+  fee_waiver_adjustment_amount: number | null;
+  original_transaction_id: string | null;
 };
 
-type ImportRow = {
-  rowNumber: number;
+type SelectedCardOption =
+  | "all"
+  | string;
 
-  merchant: string;
-  merchantRaw: string;
+type PeriodOption =
+  | "this_month"
+  | "last_month"
+  | "anniversary";
 
-  amount: number;
-  originalTransactionAmount: number;
-
-  transactionDate: string;
-
+type CategorySummary = {
   category: string;
+  amount: number;
+};
 
-  cardId: string;
+type RewardBucketSummary = {
+  bucket: string;
+  earned: number;
+  cap: number | null;
+  periodKey: string | null;
+};
 
-  sourceTransactionId: string | null;
+type CardSummary = {
+  card: Card;
 
-  transactionType:
-    | "purchase"
-    | "refund"
-    | "reversal"
-    | "fee"
-    | "payment"
-    | "cash_withdrawal"
-    | "other";
+  monthSpend: number;
+  transactionCount: number;
 
-  paymentRoute: string | null;
+  categories: CategorySummary[];
 
-  mcc: number | null;
+  rewardBuckets: RewardBucketSummary[];
 
-  mccDescription: string | null;
+  rewardTotal: number;
 
-  classificationMethod: string;
+  anniversarySpend: number;
 
-  emiStatus:
-    | "regular"
-    | "emi"
-    | "no_cost_emi";
+  waiverThreshold:
+    | number
+    | null;
 
-  emiPrincipal: number | null;
-  emiInterestRate: number | null;
-  emiInterest: number | null;
-  emiProcessingFee: number | null;
-  gstOnProcessingFee: number | null;
-  gstOnInterest: number | null;
-  emiOtherFees: number | null;
-  emiNumber: number | null;
-  totalEmis: number | null;
-  emiTotalPayable: number | null;
-  emiStartDate: string | null;
-  emiEndDate: string | null;
-  totalTransactionCost: number | null;
+  waiverRemaining:
+    | number
+    | null;
 
-  rawValues: string[];
+  waiverProgress:
+    | number
+    | null;
 
-  duplicate: boolean;
-  selected: boolean;
-  error: string | null;
+  isLifetimeFree: boolean;
 };
 
 const CATEGORIES = [
@@ -158,21 +142,6 @@ const PAYMENT_ROUTES = [
   "Other",
 ];
 
-const EMI_STATUSES = [
-  {
-    value: "regular",
-    label: "Regular purchase",
-  },
-  {
-    value: "emi",
-    label: "EMI",
-  },
-  {
-    value: "no_cost_emi",
-    label: "No-Cost EMI",
-  },
-] as const;
-
 const TRANSACTION_TYPES = [
   {
     value: "purchase",
@@ -186,79 +155,343 @@ const TRANSACTION_TYPES = [
     value: "reversal",
     label: "Reversal",
   },
+] as const;
+
+const EMI_OPTIONS = [
   {
-    value: "fee",
-    label: "Fee",
+    value: "regular",
+    label: "Regular",
   },
   {
-    value: "payment",
-    label: "Card payment",
+    value: "emi",
+    label: "EMI",
   },
   {
-    value: "cash_withdrawal",
-    label: "Cash withdrawal",
-  },
-  {
-    value: "other",
-    label: "Other",
+    value: "no_cost_emi",
+    label: "No-Cost EMI",
   },
 ] as const;
 
-const CONNECTION_LABELS: Record<
-  string,
-  string
-> = {
-  manual: "Manual",
-  statement: "Statement",
-  account_aggregator: "Connected",
-  api: "Connected",
-};
-
-function normalizeHeader(
-  value: string
-): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[\s_-]+/g, "");
+function startOfMonth(
+  date: Date
+): Date {
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    1
+  );
 }
 
-function normalizeMerchant(
+function endOfMonth(
+  date: Date
+): Date {
+  return new Date(
+    date.getFullYear(),
+    date.getMonth() + 1,
+    0,
+    23,
+    59,
+    59,
+    999
+  );
+}
+
+function getDateValue(
   value: string
-): string {
-  return value
-    .toLowerCase()
-    .replace(
-      /[^a-z0-9]+/g,
-      ""
+): Date {
+  return new Date(
+    `${value}T00:00:00`
+  );
+}
+
+function inRange(
+  date: Date,
+  start: Date,
+  end: Date
+): boolean {
+  return (
+    date.getTime() >=
+      start.getTime() &&
+    date.getTime() <=
+      end.getTime()
+  );
+}
+
+function getAnniversaryPeriod(
+  settings: CardAccountSettings,
+  referenceDate: Date
+): {
+  start: Date;
+  end: Date;
+} | null {
+  if (
+    !settings.anniversary_month ||
+    !settings.anniversary_year
+  ) {
+    return null;
+  }
+
+  const anniversaryMonth =
+    settings.anniversary_month;
+
+  let year =
+    referenceDate.getFullYear();
+
+  if (
+    referenceDate.getMonth() + 1 <
+    anniversaryMonth
+  ) {
+    year -= 1;
+  }
+
+  /*
+   * Do not begin before the card's recorded issue year.
+   */
+  year = Math.max(
+    year,
+    settings.anniversary_year
+  );
+
+  const start =
+    new Date(
+      year,
+      anniversaryMonth - 1,
+      1
     );
+
+  const end =
+    new Date(
+      year + 1,
+      anniversaryMonth - 1,
+      0,
+      23,
+      59,
+      59,
+      999
+    );
+
+  return {
+    start,
+    end,
+  };
 }
 
-function parseCsvLine(
-  line: string
-): string[] {
-  const values: string[] = [];
+function getSelectedMonthRange(
+  period: PeriodOption,
+  referenceDate: Date
+): {
+  start: Date;
+  end: Date;
+} {
+  if (
+    period ===
+    "last_month"
+  ) {
+    const lastMonth =
+      new Date(
+        referenceDate.getFullYear(),
+        referenceDate.getMonth() - 1,
+        1
+      );
+
+    return {
+      start:
+        startOfMonth(
+          lastMonth
+        ),
+      end:
+        endOfMonth(
+          lastMonth
+        ),
+    };
+  }
+
+  return {
+    start:
+      startOfMonth(
+        referenceDate
+      ),
+    end:
+      endOfMonth(
+        referenceDate
+      ),
+  };
+}
+
+function getNetSpend(
+  transactions: SpendTransaction[]
+): number {
+  return transactions.reduce(
+    (
+      total,
+      transaction
+    ) => {
+      const amount =
+        Math.abs(
+          Number(
+            transaction.amount
+          )
+        );
+
+      const type =
+        transaction.transaction_type ??
+        "purchase";
+
+      if (
+        type ===
+          "refund" ||
+        type ===
+          "reversal"
+      ) {
+        return (
+          total - amount
+        );
+      }
+
+      if (
+        type ===
+          "fee" ||
+        type ===
+          "payment" ||
+        type ===
+          "cash_withdrawal"
+      ) {
+        return total;
+      }
+
+      return (
+        total + amount
+      );
+    },
+    0
+  );
+}
+
+function getNetFeeWaiverSpend(
+  transactions: SpendTransaction[]
+): number {
+  return transactions.reduce(
+    (
+      total,
+      transaction
+    ) => {
+      const explicitAdjustment =
+        transaction.fee_waiver_adjustment_amount;
+
+      if (
+        explicitAdjustment !==
+          null &&
+        explicitAdjustment !==
+          undefined
+      ) {
+        return (
+          total +
+          Number(
+            explicitAdjustment
+          )
+        );
+      }
+
+      const amount =
+        Math.abs(
+          Number(
+            transaction.amount
+          )
+        );
+
+      const type =
+        transaction.transaction_type ??
+        "purchase";
+
+      if (
+        type ===
+          "refund" ||
+        type ===
+          "reversal"
+      ) {
+        return (
+          total - amount
+        );
+      }
+
+      if (
+        type ===
+          "purchase" ||
+        type ===
+          "other"
+      ) {
+        return (
+          total + amount
+        );
+      }
+
+      return total;
+    },
+    0
+  );
+}
+
+function formatMonthLabel(
+  date: Date
+): string {
+  return new Intl.DateTimeFormat(
+    "en-IN",
+    {
+      month: "long",
+      year: "numeric",
+    }
+  ).format(date);
+}
+
+function formatDateLabel(
+  value: string
+): string {
+  const date =
+    getDateValue(
+      value
+    );
+
+  return new Intl.DateTimeFormat(
+    "en-IN",
+    {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    }
+  ).format(date);
+}
+
+function buildCsvRows(
+  content: string
+): string[][] {
+  const rows: string[][] =
+    [];
 
   let current = "";
-  let insideQuotes = false;
+  let row: string[] = [];
+  let quoted = false;
 
   for (
     let index = 0;
-    index < line.length;
+    index < content.length;
     index += 1
   ) {
-    const character = line[index];
+    const character =
+      content[index];
 
-    if (character === '"') {
+    if (
+      character === '"'
+    ) {
       if (
-        insideQuotes &&
-        line[index + 1] === '"'
+        quoted &&
+        content[index + 1] ===
+          '"'
       ) {
         current += '"';
         index += 1;
       } else {
-        insideQuotes =
-          !insideQuotes;
+        quoted =
+          !quoted;
       }
 
       continue;
@@ -266,118 +499,94 @@ function parseCsvLine(
 
     if (
       character === "," &&
-      !insideQuotes
+      !quoted
     ) {
-      values.push(
+      row.push(
         current.trim()
       );
       current = "";
       continue;
     }
 
-    current += character;
-  }
-
-  values.push(
-    current.trim()
-  );
-
-  return values;
-}
-
-function parseCsv(
-  content: string
-): string[][] {
-  const cleaned = content
-    .replace(/^\uFEFF/, "")
-    .replace(
-      /\r\n/g,
-      "\n"
-    )
-    .replace(
-      /\r/g,
-      "\n"
-    );
-
-  const rows: string[][] = [];
-
-  let current = "";
-  let insideQuotes = false;
-
-  for (
-    let index = 0;
-    index < cleaned.length;
-    index += 1
-  ) {
-    const character =
-      cleaned[index];
-
-    if (character === '"') {
-      if (
-        insideQuotes &&
-        cleaned[index + 1] === '"'
-      ) {
-        current += '""';
-        index += 1;
-      } else {
-        insideQuotes =
-          !insideQuotes;
-        current += character;
-      }
-
-      continue;
-    }
-
     if (
-      character === "\n" &&
-      !insideQuotes
+      (character === "\n" ||
+        character === "\r") &&
+      !quoted
     ) {
-      if (current.trim()) {
-        rows.push(
-          parseCsvLine(
-            current
-          )
-        );
+      if (
+        character === "\r" &&
+        content[index + 1] ===
+          "\n"
+      ) {
+        index += 1;
       }
 
-      current = "";
+      if (
+        current ||
+        row.length
+      ) {
+        row.push(
+          current.trim()
+        );
+        current = "";
+        rows.push(row);
+        row = [];
+      }
+
       continue;
     }
 
-    current += character;
+    current +=
+      character;
   }
 
-  if (current.trim()) {
-    rows.push(
-      parseCsvLine(current)
+  if (
+    current ||
+    row.length
+  ) {
+    row.push(
+      current.trim()
     );
+
+    rows.push(row);
   }
 
   return rows;
 }
 
-function findColumnIndex(
+function normalizeHeader(
+  value: string
+): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(
+      /[\s_-]+/g,
+      ""
+    );
+}
+
+function findColumn(
   headers: string[],
   candidates: string[]
 ): number {
-  const normalizedHeaders =
+  const normalized =
     headers.map(
       normalizeHeader
     );
 
-  for (const candidate of candidates) {
-    const normalizedCandidate =
-      normalizeHeader(
-        candidate
+  for (
+    const candidate of candidates
+  ) {
+    const index =
+      normalized.indexOf(
+        normalizeHeader(
+          candidate
+        )
       );
 
-    const exactIndex =
-      normalizedHeaders.indexOf(
-        normalizedCandidate
-      );
-
-    if (exactIndex >= 0) {
-      return exactIndex;
+    if (index >= 0) {
+      return index;
     }
   }
 
@@ -385,186 +594,95 @@ function findColumnIndex(
 }
 
 function parseAmount(
-  raw: string
+  value: string
 ): number | null {
-  if (!raw) {
-    return null;
-  }
-
-  const value = raw.trim();
-
   if (!value) {
     return null;
   }
 
-  const isParenthesizedNegative =
-    value.startsWith("(") &&
-    value.endsWith(")");
-
-  const cleaned = value
-    .replace(/,/g, "")
-    .replace(
-      /[₹$€£¥\s]/g,
-      ""
-    )
-    .replace(
-      /[()]/g,
-      ""
-    )
-    .trim();
-
-  if (!cleaned) {
-    return null;
-  }
-
-  const numeric =
-    Number(cleaned);
-
-  if (
-    !Number.isFinite(
-      numeric
-    )
-  ) {
-    return null;
-  }
-
-  return isParenthesizedNegative
-    ? -Math.abs(numeric)
-    : numeric;
-}
-
-function parseOptionalNumber(
-  raw: string
-): number | null {
-  if (!raw?.trim()) {
-    return null;
-  }
-
-  return parseAmount(raw);
-}
-
-function parseInteger(
-  raw: string
-): number | null {
-  if (!raw?.trim()) {
-    return null;
-  }
-
-  const numeric =
-    Number(
-      raw.replace(
-        /[^\d.-]/g,
+  const cleaned =
+    value
+      .replace(/,/g, "")
+      .replace(
+        /[₹$€£¥\s]/g,
         ""
       )
-    );
+      .replace(
+        /[()]/g,
+        ""
+      )
+      .trim();
 
-  if (
-    !Number.isInteger(
-      numeric
-    )
-  ) {
-    return null;
-  }
+  const number =
+    Number(cleaned);
 
-  return numeric;
+  return Number.isFinite(
+    number
+  )
+    ? number
+    : null;
 }
 
 function parseDate(
-  raw: string
+  value: string
 ): string | null {
-  const value =
-    raw.trim();
+  const input =
+    value.trim();
 
-  if (!value) {
+  if (!input) {
     return null;
   }
 
-  const isoMatch =
-    value.match(
+  const iso =
+    input.match(
       /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/
     );
 
-  if (isoMatch) {
-    const year =
+  if (iso) {
+    return `${iso[1]}-${String(
       Number(
-        isoMatch[1]
-      );
-
-    const month =
+        iso[2]
+      )
+    ).padStart(
+      2,
+      "0"
+    )}-${String(
       Number(
-        isoMatch[2]
-      );
-
-    const day =
-      Number(
-        isoMatch[3]
-      );
-
-    if (
-      year >= 1900 &&
-      month >= 1 &&
-      month <= 12 &&
-      day >= 1 &&
-      day <= 31
-    ) {
-      return `${year}-${String(
-        month
-      ).padStart(
-        2,
-        "0"
-      )}-${String(
-        day
-      ).padStart(
-        2,
-        "0"
-      )}`;
-    }
+        iso[3]
+      )
+    ).padStart(
+      2,
+      "0"
+    )}`;
   }
 
-  const dmyMatch =
-    value.match(
+  const dmy =
+    input.match(
       /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/
     );
 
-  if (dmyMatch) {
-    const day =
+  if (dmy) {
+    return `${dmy[3]}-${String(
       Number(
-        dmyMatch[1]
-      );
-
-    const month =
+        dmy[2]
+      )
+    ).padStart(
+      2,
+      "0"
+    )}-${String(
       Number(
-        dmyMatch[2]
-      );
-
-    const year =
-      Number(
-        dmyMatch[3]
-      );
-
-    if (
-      year >= 1900 &&
-      month >= 1 &&
-      month <= 12 &&
-      day >= 1 &&
-      day <= 31
-    ) {
-      return `${year}-${String(
-        month
-      ).padStart(
-        2,
-        "0"
-      )}-${String(
-        day
-      ).padStart(
-        2,
-        "0"
-      )}`;
-    }
+        dmy[1]
+      )
+    ).padStart(
+      2,
+      "0"
+    )}`;
   }
 
   const parsed =
-    new Date(value);
+    new Date(
+      input
+    );
 
   if (
     Number.isNaN(
@@ -587,447 +705,6 @@ function parseDate(
   )}`;
 }
 
-function parseBoolean(
-  value: string
-): boolean {
-  return /^(yes|true|y|1)$/i.test(
-    value.trim()
-  );
-}
-
-function normalizeEmiStatus(
-  value: string
-):
-  | "regular"
-  | "emi"
-  | "no_cost_emi" {
-  const normalized =
-    normalizeHeader(
-      value
-    );
-
-  if (
-    normalized.includes(
-      "nocostemi"
-    ) ||
-    normalized.includes(
-      "nocost"
-    )
-  ) {
-    return "no_cost_emi";
-  }
-
-  if (
-    normalized === "emi" ||
-    normalized.includes(
-      "installment"
-    ) ||
-    normalized.includes(
-      "instalment"
-    )
-  ) {
-    return "emi";
-  }
-
-  return "regular";
-}
-
-function normalizeTransactionType(
-  value: string
-):
-  | "purchase"
-  | "refund"
-  | "reversal"
-  | "fee"
-  | "payment"
-  | "cash_withdrawal"
-  | "other" {
-  const normalized =
-    normalizeHeader(
-      value
-    );
-
-  if (
-    normalized.includes(
-      "refund"
-    )
-  ) {
-    return "refund";
-  }
-
-  if (
-    normalized.includes(
-      "reversal"
-    )
-  ) {
-    return "reversal";
-  }
-
-  if (
-    normalized.includes(
-      "fee"
-    ) ||
-    normalized.includes(
-      "charge"
-    )
-  ) {
-    return "fee";
-  }
-
-  if (
-    normalized.includes(
-      "payment"
-    ) ||
-    normalized.includes(
-      "repayment"
-    )
-  ) {
-    return "payment";
-  }
-
-  if (
-    normalized.includes(
-      "cash"
-    ) ||
-    normalized.includes(
-      "atm"
-    )
-  ) {
-    return "cash_withdrawal";
-  }
-
-  return "purchase";
-}
-
-function inferCategory(
-  merchant: string
-): {
-  category: string;
-  classificationMethod: string;
-} {
-  const value =
-    merchant.toLowerCase();
-
-  if (
-    /swiggy|zomato|eazydiner|restaurant|cafe|dining|food/.test(
-      value
-    )
-  ) {
-    return {
-      category: "Dining",
-      classificationMethod:
-        "merchant",
-    };
-  }
-
-  if (
-    /amazon|flipkart|myntra|ajio|shopping|retail/.test(
-      value
-    )
-  ) {
-    return {
-      category: "Shopping",
-      classificationMethod:
-        "merchant",
-    };
-  }
-
-  if (
-    /uber|ola|rapido|fuel|petrol|diesel|hpcl|bpcl|iocl/.test(
-      value
-    )
-  ) {
-    return {
-      category: "Fuel",
-      classificationMethod:
-        "merchant",
-    };
-  }
-
-  if (
-    /airtel|jio|vi |vodafone|electricity|bescom|water|gas|broadband|internet/.test(
-      value
-    )
-  ) {
-    return {
-      category:
-        "Utilities",
-      classificationMethod:
-        "merchant",
-    };
-  }
-
-  if (
-    /netflix|prime video|spotify|disney|bookmyshow|sony liv|hotstar/.test(
-      value
-    )
-  ) {
-    return {
-      category:
-        "Entertainment",
-      classificationMethod:
-        "merchant",
-    };
-  }
-
-  if (
-    /makemytrip|mmt|cleartrip|booking.com|air india|indigo|vistara|hotel|flight|airlines/.test(
-      value
-    )
-  ) {
-    return {
-      category: "Travel",
-      classificationMethod:
-        "merchant",
-    };
-  }
-
-  if (
-    /insurance|lic |policy/.test(
-      value
-    )
-  ) {
-    return {
-      category:
-        "Insurance",
-      classificationMethod:
-        "merchant",
-    };
-  }
-
-  return {
-    category: "Other",
-    classificationMethod:
-      "default",
-  };
-}
-
-function formatConnectionStatus(
-  card: Card
-): string {
-  const connectionType =
-    card.connection_type ??
-    "manual";
-
-  const connectionStatus =
-    card.connection_status ??
-    "manual";
-
-  if (
-    connectionType ===
-      "account_aggregator" &&
-    connectionStatus ===
-      "connected"
-  ) {
-    return "Connected";
-  }
-
-  if (
-    connectionType ===
-    "statement"
-  ) {
-    return "Statement";
-  }
-
-  if (
-    connectionStatus ===
-    "disconnected"
-  ) {
-    return "Disconnected";
-  }
-
-  if (
-    connectionStatus ===
-    "error"
-  ) {
-    return "Error";
-  }
-
-  return (
-    CONNECTION_LABELS[
-      connectionType
-    ] ?? "Manual"
-  );
-}
-
-function buildFingerprintInput(
-  values: {
-    cardId: string | null;
-    transactionDate: string;
-    amount: number;
-    merchant: string;
-    transactionType: string;
-  }
-): string {
-  return [
-    values.cardId ?? "none",
-    values.transactionDate,
-    Math.abs(
-      values.amount
-    ).toFixed(2),
-    normalizeMerchant(
-      values.merchant
-    ),
-    values.transactionType,
-  ].join("|");
-}
-
-async function createTransactionFingerprint(
-  values: {
-    cardId: string | null;
-    transactionDate: string;
-    amount: number;
-    merchant: string;
-    transactionType: string;
-  }
-): Promise<string> {
-  const input =
-    buildFingerprintInput(
-      values
-    );
-
-  if (
-    typeof window !==
-    "undefined" &&
-    window.crypto?.subtle
-  ) {
-    const encoded =
-      new TextEncoder().encode(
-        input
-      );
-
-    const digest =
-      await window.crypto.subtle.digest(
-        "SHA-256",
-        encoded
-      );
-
-    return Array.from(
-      new Uint8Array(
-        digest
-      )
-    )
-      .map(
-        (byte) =>
-          byte
-            .toString(16)
-            .padStart(
-              2,
-              "0"
-            )
-      )
-      .join("");
-  }
-
-  return input;
-}
-
-function isPotentialDuplicate(
-  existing: SpendTransaction,
-  candidate: {
-    cardId: string | null;
-    merchant: string;
-    amount: number;
-    transactionDate: string;
-    transactionType: string;
-  }
-): boolean {
-  if (
-    existing.card_id !==
-    candidate.cardId
-  ) {
-    return false;
-  }
-
-  if (
-    existing.transaction_type !==
-    candidate.transactionType
-  ) {
-    return false;
-  }
-
-  const existingAmount =
-    Math.abs(
-      Number(
-        existing.amount
-      )
-    );
-
-  const candidateAmount =
-    Math.abs(
-      Number(
-        candidate.amount
-      )
-    );
-
-  if (
-    Math.abs(
-      existingAmount -
-        candidateAmount
-    ) > 0.01
-  ) {
-    return false;
-  }
-
-  const existingDate =
-    new Date(
-      existing.transaction_date
-    );
-
-  const candidateDate =
-    new Date(
-      candidate.transactionDate
-    );
-
-  const dayDifference =
-    Math.abs(
-      existingDate.getTime() -
-        candidateDate.getTime()
-    ) /
-    (1000 * 60 * 60 * 24);
-
-  if (
-    dayDifference > 2
-  ) {
-    return false;
-  }
-
-  const existingMerchant =
-    normalizeMerchant(
-      existing.merchant
-    );
-
-  const candidateMerchant =
-    normalizeMerchant(
-      candidate.merchant
-    );
-
-  if (
-    existingMerchant ===
-    candidateMerchant
-  ) {
-    return true;
-  }
-
-  if (
-    existingMerchant.length >=
-      5 &&
-    candidateMerchant.length >=
-      5
-  ) {
-    return (
-      existingMerchant.includes(
-        candidateMerchant
-      ) ||
-      candidateMerchant.includes(
-        existingMerchant
-      )
-    );
-  }
-
-  return false;
-}
-
 export default function SpendPage() {
   const router =
     useRouter();
@@ -1038,115 +715,99 @@ export default function SpendPage() {
   } =
     useCardIQProfile();
 
-  const [
-    cards,
-    setCards,
-  ] = useState<Card[]>([]);
+  const [cards, setCards] =
+    useState<Card[]>([]);
 
   const [
     transactions,
     setTransactions,
+  ] =
+    useState<
+      SpendTransaction[]
+    >([]);
+
+  const [settings, setSettings] =
+    useState<
+      Record<
+        string,
+        CardAccountSettings
+      >
+    >({});
+
+  const [rewardRules, setRewardRules] =
+    useState<
+      RewardRule[]
+    >([]);
+
+  const [
+    selectedCards,
+    setSelectedCards,
   ] = useState<
-    SpendTransaction[]
-  >([]);
+    SelectedCardOption[]
+  >(["all"]);
 
   const [
-    loadingCards,
-    setLoadingCards,
-  ] = useState(true);
+    period,
+    setPeriod,
+  ] =
+    useState<PeriodOption>(
+      "this_month"
+    );
 
   const [
-    loadingTransactions,
-    setLoadingTransactions,
-  ] = useState(true);
-
-  const [
-    saving,
-    setSaving,
-  ] = useState(false);
-
-  const [
-    deletingTransactionId,
-    setDeletingTransactionId,
-  ] = useState<
-    string | null
-  >(null);
-
-  const [
-    editingTransactionId,
-    setEditingTransactionId,
-  ] = useState<
-    string | null
-  >(null);
-
-  const [
-    openMenuId,
-    setOpenMenuId,
-  ] = useState<
-    string | null
-  >(null);
+    loading,
+    setLoading,
+  ] =
+    useState(true);
 
   const [
     error,
     setError,
-  ] = useState("");
+  ] =
+    useState("");
 
   const [
     successMessage,
     setSuccessMessage,
-  ] = useState("");
+  ] =
+    useState("");
 
-  const [
-    merchant,
-    setMerchant,
-  ] = useState("");
+  /*
+   * Manual entry state.
+   */
+  const [showAddForm, setShowAddForm] =
+    useState(false);
 
-  const [
-    amount,
-    setAmount,
-  ] = useState("");
+  const [merchant, setMerchant] =
+    useState("");
 
-  const [
-    category,
-    setCategory,
-  ] = useState("Shopping");
+  const [amount, setAmount] =
+    useState("");
 
-  const [
-    cardId,
-    setCardId,
-  ] = useState("");
+  const [cardId, setCardId] =
+    useState("");
+
+  const [category, setCategory] =
+    useState("Shopping");
 
   const [
     transactionDate,
     setTransactionDate,
-  ] = useState(
-    new Date()
-      .toISOString()
-      .slice(
-        0,
-        10
-      )
-  );
+  ] =
+    useState(
+      new Date()
+        .toISOString()
+        .slice(0, 10)
+    );
 
-  const [
-    notes,
-    setNotes,
-  ] = useState("");
-
-  const [
-    mcc,
-    setMcc,
-  ] = useState("");
-
-  const [
-    mccDescription,
-    setMccDescription,
-  ] = useState("");
+  const [mcc, setMcc] =
+    useState("");
 
   const [
     paymentRoute,
     setPaymentRoute,
-  ] = useState("");
+  ] =
+    useState("");
 
   const [
     transactionType,
@@ -1156,226 +817,655 @@ export default function SpendPage() {
   >("purchase");
 
   const [
-    originalTransactionId,
-    setOriginalTransactionId,
-  ] = useState("");
-
-  const [
     emiStatus,
     setEmiStatus,
   ] = useState<
-    (typeof EMI_STATUSES)[number]["value"]
+    (typeof EMI_OPTIONS)[number]["value"]
   >("regular");
 
   const [
-    emiPrincipal,
-    setEmiPrincipal,
-  ] = useState("");
+    editingTransactionId,
+    setEditingTransactionId,
+  ] =
+    useState<
+      string | null
+    >(null);
 
   const [
-    emiInterestRate,
-    setEmiInterestRate,
-  ] = useState("");
-
-  const [
-    emiInterest,
-    setEmiInterest,
-  ] = useState("");
-
-  const [
-    emiProcessingFee,
-    setEmiProcessingFee,
-  ] = useState("");
-
-  const [
-    gstOnProcessingFee,
-    setGstOnProcessingFee,
-  ] = useState("");
-
-  const [
-    gstOnInterest,
-    setGstOnInterest,
-  ] = useState("");
-
-  const [
-    emiOtherFees,
-    setEmiOtherFees,
-  ] = useState("");
-
-  const [
-    emiNumber,
-    setEmiNumber,
-  ] = useState("");
-
-  const [
-    totalEmis,
-    setTotalEmis,
-  ] = useState("");
-
-  const [
-    emiTotalPayable,
-    setEmiTotalPayable,
-  ] = useState("");
-
-  const [
-    emiStartDate,
-    setEmiStartDate,
-  ] = useState("");
-
-  const [
-    emiEndDate,
-    setEmiEndDate,
-  ] = useState("");
+    savingTransaction,
+    setSavingTransaction,
+  ] =
+    useState(false);
 
   /*
-   * Import state
+   * Import state.
    */
   const [
-    selectedImportCardId,
-    setSelectedImportCardId,
-  ] = useState("");
+    showImport,
+    setShowImport,
+  ] =
+    useState(false);
+
+  const [
+    importCardId,
+    setImportCardId,
+  ] =
+    useState("");
 
   const [
     importRows,
     setImportRows,
-  ] = useState<
-    ImportRow[]
-  >([]);
+  ] =
+    useState<
+      Array<{
+        date: string;
+        merchant: string;
+        amount: number;
+        category: string;
+        mcc: number | null;
+        emiStatus:
+          | "regular"
+          | "emi"
+          | "no_cost_emi";
+        transactionType:
+          | "purchase"
+          | "refund"
+          | "reversal";
+        reference:
+          | string
+          | null;
+        duplicate: boolean;
+        selected: boolean;
+      }>
+    >([]);
 
-  const [
-    importFileName,
-    setImportFileName,
-  ] = useState("");
-
-  const [
-    importingStatement,
-    setImportingStatement,
-  ] = useState(false);
-
-  const [
-    importBatchId,
-    setImportBatchId,
-  ] = useState<
-    string | null
-  >(null);
-
-  const fileInputRef =
+  const importInputRef =
     useRef<HTMLInputElement | null>(
       null
     );
 
-  const profile =
-    activeProfile;
+  const [
+    importing,
+    setImporting,
+  ] = useState(false);
 
-  const selectedCard =
+  const referenceDate =
     useMemo(
-      () =>
-        cards.find(
-          (card) =>
-            card.id ===
-            cardId
-        ),
-      [cards, cardId]
+      () => new Date(),
+      []
     );
 
-  const selectedImportCard =
+  const selectedCardIds =
+    useMemo(() => {
+      if (
+        selectedCards.includes(
+          "all"
+        )
+      ) {
+        return cards.map(
+          (card) =>
+            card.id
+        );
+      }
+
+      return selectedCards.filter(
+        (
+          value
+        ): value is string =>
+          value !==
+          "all"
+      );
+    }, [
+      cards,
+      selectedCards,
+    ]);
+
+  const selectedCardObjects =
     useMemo(
       () =>
-        cards.find(
+        cards.filter(
           (card) =>
-            card.id ===
-            selectedImportCardId
+            selectedCardIds.includes(
+              card.id
+            )
         ),
       [
         cards,
-        selectedImportCardId,
+        selectedCardIds,
       ]
     );
 
-  const originalTransactionOptions =
+  const selectedTransactions =
     useMemo(
       () =>
         transactions.filter(
-          (transaction) =>
-            transaction.transaction_type ===
-              "purchase" ||
-            transaction.transaction_type ===
-              "emi"
+          (
+            transaction
+          ) =>
+            transaction.card_id !==
+              null &&
+            selectedCardIds.includes(
+              transaction.card_id
+            )
         ),
-      [transactions]
+      [
+        transactions,
+        selectedCardIds,
+      ]
     );
+
+  const visibleTransactions =
+    useMemo(() => {
+      const range =
+        getSelectedMonthRange(
+          period,
+          referenceDate
+        );
+
+      return selectedTransactions.filter(
+        (
+          transaction
+        ) => {
+          const date =
+            getDateValue(
+              transaction.transaction_date
+            );
+
+          return inRange(
+            date,
+            range.start,
+            range.end
+          );
+        }
+      );
+    }, [
+      selectedTransactions,
+      period,
+      referenceDate,
+    ]);
 
   const totalSpend =
     useMemo(
       () =>
-        transactions.reduce(
-          (
-            total,
-            transaction
-          ) => {
-            const value =
-              Math.abs(
-                Number(
-                  transaction.amount
-                )
+        getNetSpend(
+          visibleTransactions
+        ),
+      [visibleTransactions]
+    );
+
+  const categorySummary =
+    useMemo(() => {
+      const map =
+        new Map<
+          string,
+          number
+        >();
+
+      for (
+        const transaction of
+          visibleTransactions
+      ) {
+        const type =
+          transaction.transaction_type ??
+          "purchase";
+
+        const amount =
+          Math.abs(
+            Number(
+              transaction.amount
+            )
+          );
+
+        if (
+          type ===
+            "fee" ||
+          type ===
+            "payment" ||
+          type ===
+            "cash_withdrawal"
+        ) {
+          continue;
+        }
+
+        const signedAmount =
+          type ===
+              "refund" ||
+            type ===
+              "reversal"
+            ? -amount
+            : amount;
+
+        const existing =
+          map.get(
+            transaction.category
+          ) ?? 0;
+
+        map.set(
+          transaction.category,
+          existing +
+            signedAmount
+        );
+      }
+
+      return [
+        ...map.entries(),
+      ]
+        .map(
+          ([
+            category,
+            amount,
+          ]) => ({
+            category,
+            amount,
+          })
+        )
+        .sort(
+          (a, b) =>
+            b.amount -
+            a.amount
+        );
+    }, [visibleTransactions]);
+
+  const cardSummaries =
+    useMemo(() => {
+      const summaryMap =
+        new Map<
+          string,
+          CardSummary
+        >();
+
+      for (
+        const card of
+          selectedCardObjects
+      ) {
+        const cardTransactions =
+          transactions.filter(
+            (
+              transaction
+            ) =>
+              transaction.card_id ===
+              card.id
+          );
+
+        const monthRange =
+          getSelectedMonthRange(
+            period,
+            referenceDate
+          );
+
+        const monthTransactions =
+          cardTransactions.filter(
+            (
+              transaction
+            ) => {
+              const date =
+                getDateValue(
+                  transaction.transaction_date
+                );
+
+              return inRange(
+                date,
+                monthRange.start,
+                monthRange.end
               );
+            }
+          );
 
-            const type =
-              transaction.transaction_type ??
-              "purchase";
+        const cardRewardTransactions: RewardHistoryTransaction[] =
+          cardTransactions.map(
+            (
+              transaction
+            ) => ({
+              id:
+                transaction.id,
 
-            if (
-              type ===
+              amount:
+                Math.abs(
+                  Number(
+                    transaction.amount
+                  )
+                ),
+
+              category:
+                transaction.category,
+
+              merchant:
+                transaction.merchant,
+
+              transactionDate:
+                transaction.transaction_date,
+
+              mcc:
+                transaction.mcc,
+
+              paymentRoute:
+                transaction.payment_route,
+
+              emiStatus:
+                transaction.emi_status as
+                  | "regular"
+                  | "emi"
+                  | "no_cost_emi"
+                  | undefined,
+
+              transactionType:
+                transaction.transaction_type as
+                  | "purchase"
+                  | "refund"
+                  | "reversal"
+                  | "fee"
+                  | "payment"
+                  | "cash_withdrawal"
+                  | "other"
+                  | undefined,
+
+              rewardAdjustmentAmount:
+                transaction.reward_adjustment_amount,
+
+              card: {
+                bank:
+                  card.bank,
+
+                name:
+                  card.name,
+
+                variant:
+                  card.variant,
+              },
+            })
+          );
+
+        const rewardResults =
+          calculateRewardsForTransactions(
+            cardRewardTransactions,
+            rewardRules
+          );
+
+        const rewardByTransaction =
+          new Map(
+            rewardResults.map(
+              (
+                result
+              ) => [
+                result.transactionId,
+                result,
+              ]
+            )
+          );
+
+        const monthlyRewardResults =
+          monthTransactions
+            .map(
+              (
+                transaction
+              ) =>
+                rewardByTransaction.get(
+                  transaction.id
+                )
+            )
+            .filter(
+              Boolean
+            );
+
+        const rewardTotal =
+          monthlyRewardResults.reduce(
+            (
+              total,
+              result
+            ) =>
+              total +
+              Number(
+                result?.rewardAmount ??
+                  0
+              ),
+            0
+          );
+
+        const bucketMap =
+          new Map<
+            string,
+            RewardBucketSummary
+          >();
+
+        for (
+          const result of
+            monthlyRewardResults
+        ) {
+          if (
+            !result?.rewardBucket
+          ) {
+            continue;
+          }
+
+          const key =
+            result.periodKey ??
+            result.rewardBucket;
+
+          const current =
+            bucketMap.get(
+              key
+            );
+
+          const matchingRule =
+            rewardRules.find(
+              (
+                rule
+              ) =>
+                rule.id ===
+                result.rewardRuleId
+            );
+
+          bucketMap.set(
+            key,
+            {
+              bucket:
+                result.rewardBucket,
+
+              earned:
+                (
+                  current?.earned ??
+                  0
+                ) +
+                Number(
+                  result.rewardAmount
+                ),
+
+              cap:
+                matchingRule?.cap_amount ??
+                current?.cap ??
+                null,
+
+              periodKey:
+                result.periodKey,
+            }
+          );
+        }
+
+        const categories =
+          new Map<
+            string,
+            number
+          >();
+
+        for (
+          const transaction of
+            monthTransactions
+        ) {
+          const type =
+            transaction.transaction_type ??
+            "purchase";
+
+          if (
+            type ===
+              "fee" ||
+            type ===
+              "payment" ||
+            type ===
+              "cash_withdrawal"
+          ) {
+            continue;
+          }
+
+          const amount =
+            Math.abs(
+              Number(
+                transaction.amount
+              )
+            );
+
+          const signedAmount =
+            type ===
                 "refund" ||
               type ===
                 "reversal"
-            ) {
-              return (
-                total - value
-              );
-            }
+              ? -amount
+              : amount;
 
-            if (
-              type ===
-                "fee" ||
-              type ===
-                "payment" ||
-              type ===
-                "cash_withdrawal"
-            ) {
-              return total;
-            }
+          categories.set(
+            transaction.category,
+            (
+              categories.get(
+                transaction.category
+              ) ?? 0
+            ) +
+              signedAmount
+          );
+        }
 
-            return (
-              total + value
-            );
-          },
-          0
-        ),
-      [transactions]
-    );
+        const anniversarySetting =
+          settings[
+            card.id
+          ];
 
-  const importSelectedCount =
-    useMemo(
-      () =>
-        importRows.filter(
-          (row) =>
-            row.selected &&
-            !row.duplicate &&
-            !row.error
-        ).length,
-      [importRows]
-    );
+        const anniversaryPeriod =
+          anniversarySetting
+            ? getAnniversaryPeriod(
+                anniversarySetting,
+                referenceDate
+              )
+            : null;
 
-  const importDuplicateCount =
-    useMemo(
-      () =>
-        importRows.filter(
-          (row) =>
-            row.duplicate
-        ).length,
-      [importRows]
-    );
+        const anniversaryTransactions =
+          anniversaryPeriod
+            ? cardTransactions.filter(
+                (
+                  transaction
+                ) => {
+                  const date =
+                    getDateValue(
+                      transaction.transaction_date
+                    );
+
+                  return inRange(
+                    date,
+                    anniversaryPeriod.start,
+                    anniversaryPeriod.end
+                  );
+                }
+              )
+            : [];
+
+        const anniversarySpend =
+          getNetFeeWaiverSpend(
+            anniversaryTransactions
+          );
+
+        const threshold =
+          anniversarySetting?.annual_fee_waiver_threshold ??
+          null;
+
+        const remaining =
+          threshold !== null
+            ? Math.max(
+                0,
+                threshold -
+                  anniversarySpend
+              )
+            : null;
+
+        const progress =
+          threshold !== null &&
+          threshold >
+            0
+            ? Math.min(
+                100,
+                (
+                  anniversarySpend /
+                  threshold
+                ) *
+                  100
+              )
+            : null;
+
+        summaryMap.set(
+          card.id,
+          {
+            card,
+
+            monthSpend:
+              getNetSpend(
+                monthTransactions
+              ),
+
+            transactionCount:
+              monthTransactions.length,
+
+            categories:
+              [
+                ...categories.entries(),
+              ]
+                .map(
+                  ([
+                    category,
+                    amount,
+                  ]) => ({
+                    category,
+                    amount,
+                  })
+                )
+                .sort(
+                  (a, b) =>
+                    b.amount -
+                    a.amount
+                ),
+
+            rewardBuckets:
+              [
+                ...bucketMap.values(),
+              ],
+
+            rewardTotal,
+
+            anniversarySpend,
+
+            waiverThreshold:
+              threshold,
+
+            waiverRemaining:
+              remaining,
+
+            waiverProgress:
+              progress,
+
+            isLifetimeFree:
+              Boolean(
+                anniversarySetting?.is_lifetime_free
+              ),
+          }
+        );
+      }
+
+      return [
+        ...summaryMap.values(),
+      ];
+    }, [
+      selectedCardObjects,
+      transactions,
+      rewardRules,
+      settings,
+      period,
+      referenceDate,
+    ]);
 
   useEffect(() => {
     const loadData =
@@ -1387,20 +1477,17 @@ export default function SpendPage() {
         }
 
         if (
-          !profile?.id
+          !activeProfile?.id
         ) {
-          setCards([]);
-          setTransactions(
-            []
-          );
-          setLoadingCards(
-            false
-          );
-          setLoadingTransactions(
+          setLoading(
             false
           );
           return;
         }
+
+        setLoading(
+          true
+        );
 
         const supabase =
           createClient();
@@ -1419,19 +1506,11 @@ export default function SpendPage() {
           return;
         }
 
-        setLoadingCards(
-          true
-        );
-
-        setLoadingTransactions(
-          true
-        );
-
-        setError("");
-
         const [
           cardsResult,
           transactionsResult,
+          settingsResult,
+          rulesResult,
         ] =
           await Promise.all([
             supabase
@@ -1439,7 +1518,7 @@ export default function SpendPage() {
                 "cards"
               )
               .select(
-                "id, name, bank, network, variant, card_last_four, connection_type, connection_status, last_synced_at"
+                "id, name, bank, network, variant, card_last_four"
               )
               .eq(
                 "user_id",
@@ -1447,7 +1526,7 @@ export default function SpendPage() {
               )
               .eq(
                 "profile_id",
-                profile.id
+                activeProfile.id
               )
               .order(
                 "created_at",
@@ -1462,7 +1541,7 @@ export default function SpendPage() {
                 "spend_transactions"
               )
               .select(
-                "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, merchant_raw, mcc, mcc_description, classification_method, payment_route, transaction_type, source_type, source_transaction_id, emi_status, emi_principal, emi_interest_rate, emi_interest, emi_processing_fee, emi_tax, gst_on_processing_fee, gst_on_interest, emi_other_fees, emi_number, total_emis, emi_total_payable, emi_start_date, emi_end_date, original_transaction_amount, total_transaction_cost, reward_adjustment_amount, fee_waiver_adjustment_amount, original_transaction_id, transaction_fingerprint"
+                "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, mcc, mcc_description, classification_method, payment_route, transaction_type, source_type, source_transaction_id, emi_status, reward_adjustment_amount, fee_waiver_adjustment_amount, original_transaction_id"
               )
               .eq(
                 "user_id",
@@ -1470,7 +1549,7 @@ export default function SpendPage() {
               )
               .eq(
                 "profile_id",
-                profile.id
+                activeProfile.id
               )
               .order(
                 "transaction_date",
@@ -1479,77 +1558,60 @@ export default function SpendPage() {
                     false,
                 }
               )
+              .limit(
+                500
+              ),
+
+            supabase
+              .from(
+                "card_account_settings"
+              )
+              .select(
+                "card_id, is_lifetime_free, anniversary_month, anniversary_year, annual_fee_waiver_threshold"
+              )
+              .eq(
+                "user_id",
+                user.id
+              )
+              .eq(
+                "profile_id",
+                activeProfile.id
+              ),
+
+            supabase
+              .from(
+                "reward_rules"
+              )
+              .select(
+                "*"
+              )
               .order(
-                "created_at",
+                "priority",
                 {
                   ascending:
                     false,
                 }
-              )
-              .limit(
-                100
               ),
           ]);
 
         if (
           cardsResult.error
         ) {
-          console.error(
-            cardsResult.error
-          );
-
           setError(
-            cardsResult.error.message ||
-              "Unable to load your cards."
+            cardsResult.error.message
           );
         } else {
-          const loadedCards =
-            (cardsResult.data ??
-              []) as Card[];
-
           setCards(
-            loadedCards
+            (cardsResult.data ??
+              []) as Card[]
           );
-
-          if (
-            loadedCards.length >
-              0 &&
-            !cardId
-          ) {
-            setCardId(
-              loadedCards[0]
-                .id
-            );
-          }
-
-          if (
-            loadedCards.length >
-              0 &&
-            !selectedImportCardId
-          ) {
-            setSelectedImportCardId(
-              loadedCards[0]
-                .id
-            );
-          }
         }
 
         if (
           transactionsResult.error
         ) {
-          console.error(
-            transactionsResult.error
-          );
-
           setError(
-            transactionsResult
-              .error
-              .message ||
-              "Unable to load your purchases."
-          );
-
-          setTransactions(
-            []
+            transactionsResult.error.message
           );
         } else {
           setTransactions(
@@ -1558,40 +1620,150 @@ export default function SpendPage() {
           );
         }
 
-        setLoadingCards(
-          false
-        );
+        if (
+          settingsResult.error
+        ) {
+          /*
+           * Settings may not exist for older cards.
+           * That is not fatal.
+           */
+          console.error(
+            "Card settings load error:",
+            settingsResult.error
+          );
+        } else {
+          const map: Record<
+            string,
+            CardAccountSettings
+          > = {};
 
-        setLoadingTransactions(
+          for (
+            const setting of
+              settingsResult.data ??
+              []
+          ) {
+            map[
+              setting.card_id
+            ] =
+              setting as CardAccountSettings;
+          }
+
+          setSettings(
+            map
+          );
+        }
+
+        if (
+          rulesResult.error
+        ) {
+          setError(
+            rulesResult.error.message
+          );
+        } else {
+          setRewardRules(
+            (rulesResult.data ??
+              []) as RewardRule[]
+          );
+        }
+
+        setLoading(
           false
         );
       };
 
     loadData();
   }, [
-    profile?.id,
+    activeProfile?.id,
     loadingProfiles,
     router,
   ]);
 
-  const resetForm =
+  useEffect(() => {
+    if (
+      cards.length > 0 &&
+      importCardId === ""
+    ) {
+      setImportCardId(
+        cards[0].id
+      );
+    }
+
+    if (
+      cards.length > 0 &&
+      cardId === ""
+    ) {
+      setCardId(
+        cards[0].id
+      );
+    }
+  }, [
+    cards,
+    importCardId,
+    cardId,
+  ]);
+
+  const toggleCard =
+    (
+      id: string
+    ) => {
+      setSelectedCards(
+        (
+          current
+        ) => {
+          if (
+            id ===
+            "all"
+          ) {
+            return ["all"];
+          }
+
+          const withoutAll =
+            current.filter(
+              (
+                value
+              ) =>
+                value !==
+                "all"
+            );
+
+          if (
+            withoutAll.includes(
+              id
+            )
+          ) {
+            const next =
+              withoutAll.filter(
+                (
+                  value
+                ) =>
+                  value !==
+                  id
+              );
+
+            return next.length
+              ? next
+              : ["all"];
+          }
+
+          return [
+            ...withoutAll,
+            id,
+          ];
+        }
+      );
+    };
+
+  const resetManualForm =
     () => {
       setMerchant("");
       setAmount("");
       setCategory(
         "Shopping"
       );
-
-      if (
-        cards.length > 0
-      ) {
-        setCardId(
-          cards[0].id
-        );
-      } else {
-        setCardId("");
-      }
-
+      setCardId(
+        cards[0]?.id ??
+          ""
+      );
       setTransactionDate(
         new Date()
           .toISOString()
@@ -1600,77 +1772,20 @@ export default function SpendPage() {
             10
           )
       );
-
-      setNotes("");
       setMcc("");
-      setMccDescription("");
       setPaymentRoute("");
       setTransactionType(
         "purchase"
       );
-      setOriginalTransactionId(
-        ""
-      );
-
       setEmiStatus(
         "regular"
       );
-      setEmiPrincipal("");
-      setEmiInterestRate("");
-      setEmiInterest("");
-      setEmiProcessingFee("");
-      setGstOnProcessingFee("");
-      setGstOnInterest("");
-      setEmiOtherFees("");
-      setEmiNumber("");
-      setTotalEmis("");
-      setEmiTotalPayable("");
-      setEmiStartDate("");
-      setEmiEndDate("");
-
       setEditingTransactionId(
         null
       );
-      setOpenMenuId(null);
     };
 
-  const resetEmiFields =
-    () => {
-      setEmiPrincipal("");
-      setEmiInterestRate("");
-      setEmiInterest("");
-      setEmiProcessingFee("");
-      setGstOnProcessingFee("");
-      setGstOnInterest("");
-      setEmiOtherFees("");
-      setEmiNumber("");
-      setTotalEmis("");
-      setEmiTotalPayable("");
-      setEmiStartDate("");
-      setEmiEndDate("");
-    };
-
-  const handleTransactionTypeChange =
-    (
-      value: string
-    ) => {
-      setTransactionType(
-        value as (typeof TRANSACTION_TYPES)[number]["value"]
-      );
-
-      if (
-        value !==
-          "refund" &&
-        value !==
-          "reversal"
-      ) {
-        setOriginalTransactionId(
-          ""
-        );
-      }
-    };
-
-  const handleSubmit =
+  const handleManualSubmit =
     async (
       event: React.FormEvent<HTMLFormElement>
     ) => {
@@ -1679,7 +1794,9 @@ export default function SpendPage() {
       setError("");
       setSuccessMessage("");
 
-      if (!profile?.id) {
+      if (
+        !activeProfile?.id
+      ) {
         setError(
           "No active profile is available."
         );
@@ -1692,14 +1809,11 @@ export default function SpendPage() {
       const numericAmount =
         Number(amount);
 
-      const numericMcc =
-        mcc.trim()
-          ? Number(mcc)
-          : null;
-
-      if (!trimmedMerchant) {
+      if (
+        !trimmedMerchant
+      ) {
         setError(
-          "Please enter the merchant name."
+          "Please enter the merchant."
         );
         return;
       }
@@ -1712,595 +1826,97 @@ export default function SpendPage() {
           0
       ) {
         setError(
-          "Please enter a valid transaction amount."
+          "Please enter a valid amount."
         );
         return;
       }
 
       if (
-        numericMcc !==
-          null &&
-        (!Number.isInteger(
-          numericMcc
-        ) ||
-          numericMcc <
-            1 ||
-          numericMcc >
-            9999)
+        !cardId
       ) {
         setError(
-          "MCC must be a valid numeric code."
+          "Please select a card."
         );
         return;
       }
 
-      if (!category) {
-        setError(
-          "Please select a category."
+      const supabase =
+        createClient();
+
+      const {
+        data: {
+          user,
+        },
+      } =
+        await supabase.auth.getUser();
+
+      if (!user) {
+        router.push(
+          "/login"
         );
         return;
       }
 
-      if (
-        !transactionDate
-      ) {
-        setError(
-          "Please select a transaction date."
-        );
-        return;
-      }
-
-      if (
-        (transactionType ===
-          "refund" ||
-          transactionType ===
-            "reversal") &&
-        !originalTransactionId
-      ) {
-        setError(
-          "Please select the original transaction for this refund or reversal."
-        );
-        return;
-      }
-
-      if (
-        emiStatus !==
-          "regular" &&
-        transactionType !==
-          "purchase"
-      ) {
-        setError(
-          "EMI details can only be attached to a purchase."
-        );
-        return;
-      }
-
-      const numericEmiPrincipal =
-        emiPrincipal.trim()
-          ? Number(
-              emiPrincipal
-            )
-          : null;
-
-      const numericInterestRate =
-        emiInterestRate.trim()
-          ? Number(
-              emiInterestRate
-            )
-          : null;
-
-      const numericInterest =
-        emiInterest.trim()
-          ? Number(
-              emiInterest
-            )
-          : null;
-
-      const numericProcessingFee =
-        emiProcessingFee.trim()
-          ? Number(
-              emiProcessingFee
-            )
-          : null;
-
-      const numericGstProcessingFee =
-        gstOnProcessingFee.trim()
-          ? Number(
-              gstOnProcessingFee
-            )
-          : null;
-
-      const numericGstInterest =
-        gstOnInterest.trim()
-          ? Number(
-              gstOnInterest
-            )
-          : null;
-
-      const numericOtherFees =
-        emiOtherFees.trim()
-          ? Number(
-              emiOtherFees
-            )
-          : null;
-
-      const numericEmiNumber =
-        emiNumber.trim()
-          ? Number(
-              emiNumber
-            )
-          : null;
-
-      const numericTotalEmis =
-        totalEmis.trim()
-          ? Number(
-              totalEmis
-            )
-          : null;
-
-      const numericTotalPayable =
-        emiTotalPayable.trim()
-          ? Number(
-              emiTotalPayable
-            )
-          : null;
-
-      const numericTotalCost =
-        emiStatus ===
-          "regular"
-          ? numericAmount
-          : numericTotalPayable ??
-            (
-              numericEmiPrincipal ??
-              numericAmount
-            ) +
-              (
-                numericInterest ??
-                0
-              ) +
-              (
-                numericProcessingFee ??
-                0
-              ) +
-              (
-                numericGstProcessingFee ??
-                0
-              ) +
-              (
-                numericGstInterest ??
-                0
-              ) +
-              (
-                numericOtherFees ??
-                0
-              );
-
-      const emiNumericValues = [
-        numericEmiPrincipal,
-        numericInterestRate,
-        numericInterest,
-        numericProcessingFee,
-        numericGstProcessingFee,
-        numericGstInterest,
-        numericOtherFees,
-        numericEmiNumber,
-        numericTotalEmis,
-        numericTotalPayable,
-      ];
-
-      if (
-        emiStatus !==
-          "regular" &&
-        emiNumericValues.some(
-          (
-            value
-          ) =>
-            value !==
-              null &&
-            (!Number.isFinite(
-              value
-            ) ||
-              value < 0)
-        )
-      ) {
-        setError(
-          "Please enter valid EMI amounts and values."
-        );
-        return;
-      }
-
-      if (
-        numericInterestRate !==
-          null &&
-        numericInterestRate >
-          100
-      ) {
-        setError(
-          "Interest rate cannot exceed 100%."
-        );
-        return;
-      }
-
-      if (
-        numericEmiNumber !==
-          null &&
-        (!Number.isInteger(
-          numericEmiNumber
-        ) ||
-          numericEmiNumber <
-            1)
-      ) {
-        setError(
-          "EMI number must be a positive whole number."
-        );
-        return;
-      }
-
-      if (
-        numericTotalEmis !==
-          null &&
-        (!Number.isInteger(
-          numericTotalEmis
-        ) ||
-          numericTotalEmis <
-            1)
-      ) {
-        setError(
-          "Total EMIs must be a positive whole number."
-        );
-        return;
-      }
-
-      if (
-        numericEmiNumber !==
-          null &&
-        numericTotalEmis !==
-          null &&
-        numericEmiNumber >
-          numericTotalEmis
-      ) {
-        setError(
-          "EMI number cannot be greater than total EMIs."
-        );
-        return;
-      }
-
-      setSaving(true);
+      setSavingTransaction(
+        true
+      );
 
       try {
-        const supabase =
-          createClient();
+        const payload = {
+          user_id:
+            user.id,
 
-        const {
-          data: {
-            user,
-          },
-        } =
-          await supabase.auth.getUser();
+          profile_id:
+            activeProfile.id,
 
-        if (!user) {
-          router.push(
-            "/login"
-          );
-          return;
-        }
+          card_id:
+            cardId,
 
-        const fingerprint =
-          await createTransactionFingerprint({
-            cardId:
-              selectedCard?.id ??
-              null,
-            transactionDate,
-            amount:
-              numericAmount,
-            merchant:
-              trimmedMerchant,
-            transactionType,
-          });
+          merchant:
+            trimmedMerchant,
 
-        /*
-         * Exact fingerprint check.
-         */
-        const {
-          data: fingerprintMatches,
-          error:
-            fingerprintError,
-        } =
-          await supabase
-            .from(
-              "spend_transactions"
-            )
-            .select(
-              "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, transaction_type"
-            )
-            .eq(
-              "user_id",
-              user.id
-            )
-            .eq(
-              "profile_id",
-              profile.id
-            )
-            .eq(
-              "transaction_fingerprint",
-              fingerprint
-            )
-            .limit(5);
+          merchant_raw:
+            trimmedMerchant,
 
-        if (
-          fingerprintError
-        ) {
-          throw fingerprintError;
-        }
+          amount:
+            numericAmount,
 
-        if (
-          !editingTransactionId &&
-          fingerprintMatches &&
-          fingerprintMatches.length >
-            0
-        ) {
-          setError(
-            `Possible duplicate detected: ${fingerprintMatches[0].merchant} for ${formatCurrencyValue(
-              Number(
-                fingerprintMatches[0]
-                  .amount
-              )
-            )} on ${
-              fingerprintMatches[0]
-                .transaction_date
-            }.`
-          );
+          original_transaction_amount:
+            numericAmount,
 
-          setSaving(false);
-          return;
-        }
+          currency_code:
+            activeProfile.currency_code,
 
-        /*
-         * Broader duplicate check.
-         */
-        const candidate =
-          {
-            cardId:
-              selectedCard?.id ??
-              null,
-            merchant:
-              trimmedMerchant,
-            amount:
-              numericAmount,
-            transactionDate,
-            transactionType,
-          };
+          category,
 
-        const {
-          data:
-            nearbyMatches,
-          error:
-            nearbyError,
-        } =
-          await supabase
-            .from(
-              "spend_transactions"
-            )
-            .select(
-              "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, transaction_type"
-            )
-            .eq(
-              "user_id",
-              user.id
-            )
-            .eq(
-              "profile_id",
-              profile.id
-            )
-            .eq(
-              "card_id",
-              selectedCard?.id ??
-                ""
-            )
-            .eq(
-              "transaction_type",
-              transactionType
-            )
-            .gte(
-              "transaction_date",
-              getDateOffset(
-                transactionDate,
-                -2
-              )
-            )
-            .lte(
-              "transaction_date",
-              getDateOffset(
-                transactionDate,
-                2
-              )
-            )
-            .limit(50);
-
-        if (
-          nearbyError
-        ) {
-          throw nearbyError;
-        }
-
-        const potentialDuplicate =
-          !editingTransactionId
-            ? (
-                (
-                  nearbyMatches ??
-                  []
-                ) as SpendTransaction[]
-              ).find(
-                (
-                  existing
-                ) =>
-                  isPotentialDuplicate(
-                    existing,
-                    candidate
-                  )
-              )
-            : undefined;
-
-        if (
-          potentialDuplicate
-        ) {
-          const proceed =
-            window.confirm(
-              `Possible duplicate found.\n\n${potentialDuplicate.merchant}\n${formatCurrencyValue(
-                Number(
-                  potentialDuplicate.amount
+          mcc:
+            mcc
+              ? Number(
+                  mcc
                 )
-              )}\n${potentialDuplicate.transaction_date}\n\nDo you want to add this transaction anyway?`
-            );
+              : null,
 
-          if (!proceed) {
-            setSaving(
-              false
-            );
-            return;
-          }
-        }
+          payment_route:
+            paymentRoute ||
+            null,
 
-        const transactionPayload =
-          {
-            user_id:
-              user.id,
-            profile_id:
-              profile.id,
-            card_id:
-              selectedCard?.id ??
-              null,
+          transaction_type:
+            transactionType,
 
-            merchant:
-              trimmedMerchant,
-            merchant_raw:
-              trimmedMerchant,
+          emi_status:
+            emiStatus,
 
-            amount:
-              numericAmount,
+          classification_method:
+            mcc
+              ? "mcc"
+              : "manual",
 
-            original_transaction_amount:
-              numericAmount,
+          source_type:
+            "manual",
 
-            currency_code:
-              profile.currency_code,
-
-            category,
-
-            mcc:
-              numericMcc,
-
-            mcc_description:
-              mccDescription.trim() ||
-              null,
-
-            classification_method:
-              numericMcc !==
-              null
-                ? "mcc"
-                : "manual",
-
-            payment_route:
-              paymentRoute ||
-              null,
-
-            transaction_type:
-              transactionType,
-
-            original_transaction_id:
-              originalTransactionId ||
-              null,
-
-            emi_status:
-              emiStatus,
-
-            emi_principal:
-              emiStatus !==
-                "regular"
-                ? numericEmiPrincipal
-                : null,
-
-            emi_interest_rate:
-              emiStatus !==
-                "regular"
-                ? numericInterestRate
-                : null,
-
-            emi_interest:
-              emiStatus !==
-                "regular"
-                ? numericInterest
-                : null,
-
-            emi_processing_fee:
-              emiStatus !==
-                "regular"
-                ? numericProcessingFee
-                : null,
-
-            gst_on_processing_fee:
-              emiStatus !==
-                "regular"
-                ? numericGstProcessingFee
-                : null,
-
-            gst_on_interest:
-              emiStatus !==
-                "regular"
-                ? numericGstInterest
-                : null,
-
-            emi_other_fees:
-              emiStatus !==
-                "regular"
-                ? numericOtherFees
-                : null,
-
-            emi_number:
-              emiStatus !==
-                "regular"
-                ? numericEmiNumber
-                : null,
-
-            total_emis:
-              emiStatus !==
-                "regular"
-                ? numericTotalEmis
-                : null,
-
-            emi_total_payable:
-              emiStatus !==
-                "regular"
-                ? numericTotalPayable
-                : null,
-
-            emi_start_date:
-              emiStatus !==
-                "regular"
-                ? emiStartDate ||
-                  null
-                : null,
-
-            emi_end_date:
-              emiStatus !==
-                "regular"
-                ? emiEndDate ||
-                  null
-                : null,
-
-            total_transaction_cost:
-              numericTotalCost,
-
-            transaction_fingerprint:
-              fingerprint,
-
-            notes:
-              notes.trim() ||
-              null,
-
-            source_type:
-              "manual",
-          };
+          transaction_date:
+            transactionDate,
+        };
 
         if (
           editingTransactionId
@@ -2315,7 +1931,7 @@ export default function SpendPage() {
                 "spend_transactions"
               )
               .update(
-                transactionPayload
+                payload
               )
               .eq(
                 "id",
@@ -2327,10 +1943,10 @@ export default function SpendPage() {
               )
               .eq(
                 "profile_id",
-                profile.id
+                activeProfile.id
               )
               .select(
-                "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, merchant_raw, mcc, mcc_description, classification_method, payment_route, transaction_type, source_type, source_transaction_id, emi_status, emi_principal, emi_interest_rate, emi_interest, emi_processing_fee, emi_tax, gst_on_processing_fee, gst_on_interest, emi_other_fees, emi_number, total_emis, emi_total_payable, emi_start_date, emi_end_date, original_transaction_amount, total_transaction_cost, reward_adjustment_amount, fee_waiver_adjustment_amount, original_transaction_id, transaction_fingerprint"
+                "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, mcc, mcc_description, classification_method, payment_route, transaction_type, source_type, source_transaction_id, emi_status, reward_adjustment_amount, fee_waiver_adjustment_amount, original_transaction_id"
               )
               .single();
 
@@ -2356,7 +1972,7 @@ export default function SpendPage() {
           );
 
           setSuccessMessage(
-            "Transaction updated successfully."
+            "Transaction updated."
           );
         } else {
           const {
@@ -2369,10 +1985,10 @@ export default function SpendPage() {
                 "spend_transactions"
               )
               .insert(
-                transactionPayload
+                payload
               )
               .select(
-                "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, merchant_raw, mcc, mcc_description, classification_method, payment_route, transaction_type, source_type, source_transaction_id, emi_status, emi_principal, emi_interest_rate, emi_interest, emi_processing_fee, emi_tax, gst_on_processing_fee, gst_on_interest, emi_other_fees, emi_number, total_emis, emi_total_payable, emi_start_date, emi_end_date, original_transaction_amount, total_transaction_cost, reward_adjustment_amount, fee_waiver_adjustment_amount, original_transaction_id, transaction_fingerprint"
+                "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, mcc, mcc_description, classification_method, payment_route, transaction_type, source_type, source_transaction_id, emi_status, reward_adjustment_amount, fee_waiver_adjustment_amount, original_transaction_id"
               )
               .single();
 
@@ -2392,355 +2008,37 @@ export default function SpendPage() {
           );
 
           setSuccessMessage(
-            "Transaction recorded successfully."
+            "Transaction recorded."
           );
         }
 
-        resetForm();
+        resetManualForm();
+        setShowAddForm(
+          false
+        );
       } catch (err) {
         console.error(
-          "Spend transaction save error:",
           err
         );
 
-        const message =
-          err &&
-          typeof err ===
-            "object" &&
-          "message" in err
-            ? String(
-                (
-                  err as {
-                    message: unknown;
-                  }
-                ).message
-              )
-            : null;
-
         setError(
-          message ||
-            (editingTransactionId
-              ? "Unable to update this transaction."
-              : "Unable to record this transaction.")
+          err instanceof Error
+            ? err.message
+            : "Unable to save the transaction."
         );
       } finally {
-        setSaving(false);
+        setSavingTransaction(
+          false
+        );
       }
     };
 
-  const handleEditTransaction =
-    (
-      transaction: SpendTransaction
-    ) => {
-      setMerchant(
-        transaction.merchant
-      );
-
-      setAmount(
-        Number(
-          transaction.amount
-        ).toFixed(2)
-      );
-
-      setCategory(
-        transaction.category
-      );
-
-      setCardId(
-        transaction.card_id ??
-          ""
-      );
-
-      setTransactionDate(
-        transaction.transaction_date
-      );
-
-      setNotes(
-        transaction.notes ??
-          ""
-      );
-
-      setMcc(
-        transaction.mcc !=
-          null
-          ? String(
-              transaction.mcc
-            )
-          : ""
-      );
-
-      setMccDescription(
-        transaction.mcc_description ??
-          ""
-      );
-
-      setPaymentRoute(
-        transaction.payment_route ??
-          ""
-      );
-
-      setTransactionType(
-        (transaction.transaction_type ??
-          "purchase") as (typeof TRANSACTION_TYPES)[number]["value"]
-      );
-
-      setOriginalTransactionId(
-        transaction.original_transaction_id ??
-          ""
-      );
-
-      setEmiStatus(
-        (transaction.emi_status ??
-          "regular") as (typeof EMI_STATUSES)[number]["value"]
-      );
-
-      setEmiPrincipal(
-        transaction.emi_principal !=
-          null
-          ? String(
-              transaction.emi_principal
-            )
-          : ""
-      );
-
-      setEmiInterestRate(
-        transaction.emi_interest_rate !=
-          null
-          ? String(
-              transaction.emi_interest_rate
-            )
-          : ""
-      );
-
-      setEmiInterest(
-        transaction.emi_interest !=
-          null
-          ? String(
-              transaction.emi_interest
-            )
-          : ""
-      );
-
-      setEmiProcessingFee(
-        transaction.emi_processing_fee !=
-          null
-          ? String(
-              transaction.emi_processing_fee
-            )
-          : ""
-      );
-
-      setGstOnProcessingFee(
-        transaction.gst_on_processing_fee !=
-          null
-          ? String(
-              transaction.gst_on_processing_fee
-            )
-          : ""
-      );
-
-      setGstOnInterest(
-        transaction.gst_on_interest !=
-          null
-          ? String(
-              transaction.gst_on_interest
-            )
-          : ""
-      );
-
-      setEmiOtherFees(
-        transaction.emi_other_fees !=
-          null
-          ? String(
-              transaction.emi_other_fees
-            )
-          : ""
-      );
-
-      setEmiNumber(
-        transaction.emi_number !=
-          null
-          ? String(
-              transaction.emi_number
-            )
-          : ""
-      );
-
-      setTotalEmis(
-        transaction.total_emis !=
-          null
-          ? String(
-              transaction.total_emis
-            )
-          : ""
-      );
-
-      setEmiTotalPayable(
-        transaction.emi_total_payable !=
-          null
-          ? String(
-              transaction.emi_total_payable
-            )
-          : ""
-      );
-
-      setEmiStartDate(
-        transaction.emi_start_date ??
-          ""
-      );
-
-      setEmiEndDate(
-        transaction.emi_end_date ??
-          ""
-      );
-
-      setEditingTransactionId(
-        transaction.id
-      );
-
-      setOpenMenuId(null);
-
-      setError("");
-      setSuccessMessage("");
-
-      window.scrollTo({
-        top: 0,
-        behavior:
-          "smooth",
-      });
-    };
-
-  const handleDeleteTransaction =
-    async (
-      transaction: SpendTransaction
-    ) => {
-      const confirmed =
-        window.confirm(
-          `Delete the "${transaction.merchant}" transaction permanently?\n\nThis action cannot be undone.`
-        );
-
-      if (!confirmed) {
-        return;
-      }
-
-      setDeletingTransactionId(
-        transaction.id
-      );
-
-      setOpenMenuId(null);
-      setError("");
-      setSuccessMessage("");
-
-      const supabase =
-        createClient();
-
-      const {
-        data: {
-          user,
-        },
-      } =
-        await supabase.auth.getUser();
-
-      if (!user) {
-        router.push(
-          "/login"
-        );
-        return;
-      }
-
-      const currentProfile =
-        activeProfile;
-
-      if (
-        !currentProfile?.id
-      ) {
-        setError(
-          "No active profile is available."
-        );
-
-        setDeletingTransactionId(
-          null
-        );
-
-        return;
-      }
-
-      const {
-        error:
-          deleteError,
-      } =
-        await supabase
-          .from(
-            "spend_transactions"
-          )
-          .delete()
-          .eq(
-            "id",
-            transaction.id
-          )
-          .eq(
-            "user_id",
-            user.id
-          )
-          .eq(
-            "profile_id",
-            currentProfile.id
-          );
-
-      if (
-        deleteError
-      ) {
-        console.error(
-          deleteError
-        );
-
-        setError(
-          deleteError.message ||
-            "Unable to delete this transaction."
-        );
-
-        setDeletingTransactionId(
-          null
-        );
-
-        return;
-      }
-
-      setTransactions(
-        (current) =>
-          current.filter(
-            (item) =>
-              item.id !==
-              transaction.id
-          )
-      );
-
-      if (
-        editingTransactionId ===
-        transaction.id
-      ) {
-        resetForm();
-      }
-
-      setSuccessMessage(
-        "Transaction deleted successfully."
-      );
-
-      setDeletingTransactionId(
-        null
-      );
-    };
-
-  const handleStatementFile =
+  const handleImportFile =
     async (
       event: ChangeEvent<HTMLInputElement>
     ) => {
       setError("");
       setSuccessMessage("");
-      setImportRows([]);
-      setImportBatchId(
-        null
-      );
 
       const file =
         event.target.files?.[0];
@@ -2749,44 +2047,13 @@ export default function SpendPage() {
         return;
       }
 
-      const currentProfile =
-        activeProfile;
-
-      if (
-        !currentProfile?.id
-      ) {
-        setError(
-          "No active profile is available."
-        );
-
-        event.target.value =
-          "";
-
-        return;
-      }
-
-      if (
-        !selectedImportCardId
-      ) {
-        setError(
-          "Please select the card represented by this statement first."
-        );
-
-        event.target.value =
-          "";
-
-        return;
-      }
-
       if (
         !file.name
           .toLowerCase()
-          .endsWith(
-            ".csv"
-          )
+          .endsWith(".csv")
       ) {
         setError(
-          "CSV statement import is available at this stage. PDF and Excel imports will be added through the secure document-processing layer."
+          "CSV import is currently available. PDF and Excel will use the secure document-processing layer."
         );
 
         event.target.value =
@@ -2795,23 +2062,34 @@ export default function SpendPage() {
         return;
       }
 
-      setImportFileName(
-        file.name
-      );
+      if (
+        !importCardId
+      ) {
+        setError(
+          "Select the statement card first."
+        );
+
+        event.target.value =
+          "";
+
+        return;
+      }
 
       try {
         const content =
           await file.text();
 
         const rows =
-          parseCsv(content);
+          buildCsvRows(
+            content
+          );
 
         if (
           rows.length <
           2
         ) {
           throw new Error(
-            "The CSV statement does not contain enough rows to import."
+            "The statement does not contain enough rows."
           );
         }
 
@@ -2819,7 +2097,7 @@ export default function SpendPage() {
           rows[0];
 
         const merchantIndex =
-          findColumnIndex(
+          findColumn(
             headers,
             [
               "merchant",
@@ -2827,47 +2105,42 @@ export default function SpendPage() {
               "description",
               "transaction description",
               "narration",
-              "details",
               "particulars",
             ]
           );
 
         const amountIndex =
-          findColumnIndex(
+          findColumn(
             headers,
             [
               "amount",
               "transaction amount",
               "debit",
               "spend",
-              "purchase amount",
             ]
           );
 
         const dateIndex =
-          findColumnIndex(
+          findColumn(
             headers,
             [
               "date",
               "transaction date",
               "txn date",
-              "transactiondate",
               "posted date",
-              "value date",
             ]
           );
 
         const categoryIndex =
-          findColumnIndex(
+          findColumn(
             headers,
             [
               "category",
-              "merchant category",
             ]
           );
 
         const mccIndex =
-          findColumnIndex(
+          findColumn(
             headers,
             [
               "mcc",
@@ -2875,61 +2148,30 @@ export default function SpendPage() {
             ]
           );
 
-        const mccDescriptionIndex =
-          findColumnIndex(
-            headers,
-            [
-              "mcc description",
-              "merchant category description",
-            ]
-          );
-
         const referenceIndex =
-          findColumnIndex(
+          findColumn(
             headers,
             [
-              "transaction id",
-              "transactionid",
               "reference",
               "reference number",
+              "transaction id",
               "transaction reference",
               "rrn",
               "txn id",
             ]
           );
 
-        const originalReferenceIndex =
-          findColumnIndex(
-            headers,
-            [
-              "original transaction id",
-              "original transaction reference",
-              "original reference",
-            ]
-          );
-
         const typeIndex =
-          findColumnIndex(
+          findColumn(
             headers,
             [
               "transaction type",
               "type",
-              "debit credit",
             ]
           );
 
-        const paymentRouteIndex =
-          findColumnIndex(
-            headers,
-            [
-              "payment route",
-              "payment method",
-              "channel",
-            ]
-          );
-
-        const emiStatusIndex =
-          findColumnIndex(
+        const emiIndex =
+          findColumn(
             headers,
             [
               "emi status",
@@ -2939,897 +2181,282 @@ export default function SpendPage() {
             ]
           );
 
-        const principalIndex =
-          findColumnIndex(
-            headers,
-            [
-              "principal",
-              "principal amount",
-              "emi principal",
-            ]
-          );
-
-        const interestRateIndex =
-          findColumnIndex(
-            headers,
-            [
-              "interest rate",
-              "rate of interest",
-              "roi",
-              "interest %",
-            ]
-          );
-
-        const interestIndex =
-          findColumnIndex(
-            headers,
-            [
-              "interest",
-              "interest amount",
-              "emi interest",
-            ]
-          );
-
-        const processingFeeIndex =
-          findColumnIndex(
-            headers,
-            [
-              "processing fee",
-              "emi processing fee",
-            ]
-          );
-
-        const gstProcessingIndex =
-          findColumnIndex(
-            headers,
-            [
-              "gst on processing fee",
-              "processing fee gst",
-              "gst processing fee",
-            ]
-          );
-
-        const gstInterestIndex =
-          findColumnIndex(
-            headers,
-            [
-              "gst on interest",
-              "interest gst",
-            ]
-          );
-
-        const emiOtherFeesIndex =
-          findColumnIndex(
-            headers,
-            [
-              "other emi fees",
-              "other fees",
-              "emi other fees",
-            ]
-          );
-
-        const emiNumberIndex =
-          findColumnIndex(
-            headers,
-            [
-              "emi number",
-              "installment number",
-              "instalment number",
-              "emi no",
-              "installment no",
-            ]
-          );
-
-        const totalEmisIndex =
-          findColumnIndex(
-            headers,
-            [
-              "total emis",
-              "total emi",
-              "tenure",
-              "total installments",
-              "total instalments",
-            ]
-          );
-
-        const totalPayableIndex =
-          findColumnIndex(
-            headers,
-            [
-              "total payable",
-              "emi total payable",
-              "total amount payable",
-            ]
-          );
-
-        const emiStartDateIndex =
-          findColumnIndex(
-            headers,
-            [
-              "emi start date",
-              "installment start date",
-              "instalment start date",
-            ]
-          );
-
-        const emiEndDateIndex =
-          findColumnIndex(
-            headers,
-            [
-              "emi end date",
-              "installment end date",
-              "instalment end date",
-            ]
-          );
-
         if (
           merchantIndex <
-          0
-        ) {
-          throw new Error(
-            "CardIQ could not identify a merchant/description column in this CSV."
-          );
-        }
-
-        if (
+          0 ||
           amountIndex <
-          0
-        ) {
-          throw new Error(
-            "CardIQ could not identify an amount column in this CSV."
-          );
-        }
-
-        if (
+          0 ||
           dateIndex <
           0
         ) {
           throw new Error(
-            "CardIQ could not identify a transaction date column in this CSV."
+            "CardIQ could not identify merchant, amount and date columns in this statement."
           );
         }
 
-        const supabase =
-          createClient();
-
-        const {
-          data: {
-            user,
-          },
-        } =
-          await supabase.auth.getUser();
-
-        if (!user) {
-          router.push(
-            "/login"
+        const existing =
+          transactions.filter(
+            (
+              transaction
+            ) =>
+              transaction.card_id ===
+              importCardId
           );
-          return;
-        }
 
-        const sourceTransactionIds =
+        const mapped =
           rows
             .slice(1)
-            .map(
+            .filter(
               (
                 row
               ) =>
-                referenceIndex >=
-                0
-                  ? (
-                      row[
-                        referenceIndex
-                      ] ??
-                      ""
-                    ).trim()
-                  : ""
+                row.some(
+                  (
+                    value
+                  ) =>
+                    value.trim()
+                )
             )
-            .filter(
-              Boolean
-            );
-
-        let existingSourceIds =
-          new Set<string>();
-
-        if (
-          sourceTransactionIds.length >
-          0
-        ) {
-          const {
-            data:
-              existingRows,
-            error:
-              existingError,
-          } =
-            await supabase
-              .from(
-                "spend_transactions"
-              )
-              .select(
-                "source_transaction_id"
-              )
-              .eq(
-                "user_id",
-                user.id
-              )
-              .eq(
-                "profile_id",
-                currentProfile.id
-              )
-              .in(
-                "source_transaction_id",
-                sourceTransactionIds
-              );
-
-          if (
-            existingError
-          ) {
-            throw existingError;
-          }
-
-          existingSourceIds =
-            new Set(
+            .map(
               (
-                existingRows ??
-                []
-              )
-                .map(
-                  (
-                    row
-                  ) =>
-                    row.source_transaction_id
-                )
-                .filter(
-                  (
-                    value
-                  ): value is string =>
-                    Boolean(
-                      value
-                    )
-                )
-            );
-        }
-
-        /*
-         * Pull recent transactions for broader
-         * duplicate checking when the statement
-         * doesn't have a unique reference number.
-         */
-        const {
-          data:
-            existingTransactions,
-          error:
-            existingTransactionsError,
-        } =
-          await supabase
-            .from(
-              "spend_transactions"
-            )
-            .select(
-              "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, transaction_type, source_transaction_id, transaction_fingerprint"
-            )
-            .eq(
-              "user_id",
-              user.id
-            )
-            .eq(
-              "profile_id",
-              currentProfile.id
-            )
-            .eq(
-              "card_id",
-              selectedImportCardId
-            )
-            .limit(500);
-
-        if (
-          existingTransactionsError
-        ) {
-          throw existingTransactionsError;
-        }
-
-        const parsedRows: ImportRow[] =
-          [];
-
-        rows
-          .slice(1)
-          .forEach(
-            (
-              row,
-              index
-            ) => {
-              if (
-                row.every(
-                  (
-                    value
-                  ) =>
-                    !value.trim()
-                )
-              ) {
-                return;
-              }
-
-              const rawMerchant =
-                row[
-                  merchantIndex
-                ]?.trim() ??
-                "";
-
-              const parsedAmount =
-                parseAmount(
+                row
+              ) => {
+                const merchant =
                   row[
-                    amountIndex
-                  ] ?? ""
-                );
+                    merchantIndex
+                  ]?.trim() ??
+                  "";
 
-              const parsedDate =
-                parseDate(
-                  row[
-                    dateIndex
-                  ] ?? ""
-                );
-
-              const explicitCategory =
-                categoryIndex >=
-                0
-                  ? (
-                      row[
-                        categoryIndex
-                      ] ?? ""
-                    ).trim()
-                  : "";
-
-              const categoryResult =
-                explicitCategory
-                  ? {
-                      category:
-                        explicitCategory,
-                      classificationMethod:
-                        "statement",
-                    }
-                  : inferCategory(
-                      rawMerchant
-                    );
-
-              const rawMcc =
-                mccIndex >=
-                0
-                  ? (
-                      row[
-                        mccIndex
-                      ] ?? ""
-                    ).trim()
-                  : "";
-
-              const parsedMcc =
-                rawMcc
-                  ? Number(
-                      rawMcc.replace(
-                        /[^\d]/g,
-                        ""
-                      )
-                    )
-                  : null;
-
-              const parsedMccValue =
-                parsedMcc &&
-                Number.isInteger(
-                  parsedMcc
-                )
-                  ? parsedMcc
-                  : null;
-
-              const rawTransactionType =
-                typeIndex >=
-                0
-                  ? (
-                      row[
-                        typeIndex
-                      ] ?? ""
-                    ).trim()
-                  : "";
-
-              const parsedTransactionType =
-                normalizeTransactionType(
-                  rawTransactionType
-                );
-
-              const sourceTransactionId =
-                referenceIndex >=
-                0
-                  ? (
-                      row[
-                        referenceIndex
-                      ] ??
-                      ""
-                    ).trim() ||
-                    null
-                  : null;
-
-              const originalReference =
-                originalReferenceIndex >=
-                0
-                  ? (
-                      row[
-                        originalReferenceIndex
-                      ] ??
-                      ""
-                    ).trim() ||
-                    null
-                  : null;
-
-              const rawEmiStatus =
-                emiStatusIndex >=
-                0
-                  ? (
-                      row[
-                        emiStatusIndex
-                      ] ?? ""
-                    ).trim()
-                  : "";
-
-              const parsedEmiStatus =
-                normalizeEmiStatus(
-                  rawEmiStatus
-                );
-
-              const parsedPrincipal =
-                principalIndex >=
-                0
-                  ? parseOptionalNumber(
-                      row[
-                        principalIndex
-                      ] ?? ""
-                    )
-                  : null;
-
-              const parsedInterestRate =
-                interestRateIndex >=
-                0
-                  ? parseOptionalNumber(
-                      row[
-                        interestRateIndex
-                      ] ?? ""
-                    )
-                  : null;
-
-              const parsedInterest =
-                interestIndex >=
-                0
-                  ? parseOptionalNumber(
-                      row[
-                        interestIndex
-                      ] ?? ""
-                    )
-                  : null;
-
-              const parsedProcessingFee =
-                processingFeeIndex >=
-                0
-                  ? parseOptionalNumber(
-                      row[
-                        processingFeeIndex
-                      ] ?? ""
-                    )
-                  : null;
-
-              const parsedGstProcessing =
-                gstProcessingIndex >=
-                0
-                  ? parseOptionalNumber(
-                      row[
-                        gstProcessingIndex
-                      ] ?? ""
-                    )
-                  : null;
-
-              const parsedGstInterest =
-                gstInterestIndex >=
-                0
-                  ? parseOptionalNumber(
-                      row[
-                        gstInterestIndex
-                      ] ?? ""
-                    )
-                  : null;
-
-              const parsedOtherFees =
-                emiOtherFeesIndex >=
-                0
-                  ? parseOptionalNumber(
-                      row[
-                        emiOtherFeesIndex
-                      ] ?? ""
-                    )
-                  : null;
-
-              const parsedEmiNumber =
-                emiNumberIndex >=
-                0
-                  ? parseInteger(
-                      row[
-                        emiNumberIndex
-                      ] ?? ""
-                    )
-                  : null;
-
-              const parsedTotalEmis =
-                totalEmisIndex >=
-                0
-                  ? parseInteger(
-                      row[
-                        totalEmisIndex
-                      ] ?? ""
-                    )
-                  : null;
-
-              const parsedTotalPayable =
-                totalPayableIndex >=
-                0
-                  ? parseOptionalNumber(
-                      row[
-                        totalPayableIndex
-                      ] ?? ""
-                    )
-                  : null;
-
-              const parsedEmiStartDate =
-                emiStartDateIndex >=
-                0
-                  ? parseDate(
-                      row[
-                        emiStartDateIndex
-                      ] ?? ""
-                    )
-                  : null;
-
-              const parsedEmiEndDate =
-                emiEndDateIndex >=
-                0
-                  ? parseDate(
-                      row[
-                        emiEndDateIndex
-                      ] ?? ""
-                    )
-                  : null;
-
-              const paymentRouteValue =
-                paymentRouteIndex >=
-                0
-                  ? (
-                      row[
-                        paymentRouteIndex
-                      ] ?? ""
-                    ).trim() ||
-                    null
-                  : null;
-
-              const hasError =
-                !rawMerchant
-                  ? "Merchant/description is missing."
-                  : parsedAmount ===
-                        null ||
-                      parsedAmount ===
+                const amount =
+                  Math.abs(
+                    Number(
+                      parseAmount(
+                        row[
+                          amountIndex
+                        ] ??
+                          ""
+                      ) ??
                         0
-                    ? "Amount could not be read."
-                    : !parsedDate
-                      ? "Transaction date could not be read."
-                      : null;
-
-              const normalizedAmount =
-                Math.abs(
-                  parsedAmount ??
-                    0
-                );
-
-              const fingerprint =
-                buildFingerprintInput({
-                  cardId:
-                    selectedImportCardId,
-                  transactionDate:
-                    parsedDate ??
-                    "",
-                  amount:
-                    normalizedAmount,
-                  merchant:
-                    rawMerchant,
-                  transactionType:
-                    parsedTransactionType,
-                });
-
-              const sourceDuplicate =
-                Boolean(
-                  sourceTransactionId &&
-                    existingSourceIds.has(
-                      sourceTransactionId
                     )
-                );
+                  );
 
-              const broaderDuplicate =
-                !sourceDuplicate &&
-                !hasError
-                  ? (
-                      (
-                        existingTransactions ??
-                        []
-                      ) as SpendTransaction[]
-                    ).some(
-                      (
-                        existing
-                      ) =>
-                        isPotentialDuplicate(
-                          existing,
-                          {
-                            cardId:
-                              selectedImportCardId,
-                            merchant:
-                              rawMerchant,
-                            amount:
-                              normalizedAmount,
-                            transactionDate:
-                              parsedDate ??
-                              "",
-                            transactionType:
-                              parsedTransactionType,
-                          }
-                        )
-                    )
-                  : false;
+                const date =
+                  parseDate(
+                    row[
+                      dateIndex
+                    ] ??
+                      ""
+                  ) ??
+                  "";
 
-              parsedRows.push({
-                rowNumber:
-                  index + 2,
+                const rawCategory =
+                  categoryIndex >=
+                  0
+                    ? row[
+                        categoryIndex
+                      ]?.trim()
+                    : "";
 
-                merchant:
-                  rawMerchant,
+                const inferredCategory =
+                  rawCategory ||
+                  (
+                    merchant
+                      .toLowerCase()
+                      .includes(
+                        "swiggy"
+                      ) ||
+                    merchant
+                      .toLowerCase()
+                      .includes(
+                        "zomato"
+                      ) ||
+                    merchant
+                      .toLowerCase()
+                      .includes(
+                        "eazydiner"
+                      )
+                      ? "Dining"
+                      : merchant
+                          .toLowerCase()
+                          .includes(
+                            "amazon"
+                          ) ||
+                        merchant
+                          .toLowerCase()
+                          .includes(
+                            "flipkart"
+                          ) ||
+                        merchant
+                          .toLowerCase()
+                          .includes(
+                            "myntra"
+                          )
+                        ? "Shopping"
+                        : "Other"
+                  );
 
-                merchantRaw:
-                  rawMerchant,
+                const parsedMcc =
+                  mccIndex >=
+                  0
+                    ? Number(
+                        row[
+                          mccIndex
+                        ]
+                      )
+                    : null;
 
-                amount:
-                  normalizedAmount,
+                const normalizedMcc =
+                  Number.isInteger(
+                    parsedMcc
+                  )
+                    ? parsedMcc
+                    : null;
 
-                originalTransactionAmount:
-                  normalizedAmount,
-
-                transactionDate:
-                  parsedDate ??
-                  "",
-
-                category:
-                  categoryResult.category,
-
-                cardId:
-                  selectedImportCardId,
-
-                sourceTransactionId,
-
-                transactionType:
-                  parsedTransactionType,
-
-                paymentRoute:
-                  paymentRouteValue,
-
-                mcc:
-                  parsedMccValue,
-
-                mccDescription:
-                  mccDescriptionIndex >=
+                const rawType =
+                  typeIndex >=
                   0
                     ? (
                         row[
-                          mccDescriptionIndex
-                        ] ?? ""
-                      ).trim() ||
+                          typeIndex
+                        ] ??
+                        ""
+                      ).toLowerCase()
+                    : "";
+
+                const normalizedType =
+                  rawType.includes(
+                    "refund"
+                  )
+                    ? "refund"
+                    : rawType.includes(
+                          "reversal"
+                        )
+                      ? "reversal"
+                      : "purchase";
+
+                const reference =
+                  referenceIndex >=
+                  0
+                    ? row[
+                        referenceIndex
+                      ]?.trim() ||
                       null
-                    : null,
+                    : null;
 
-                classificationMethod:
-                  parsedMccValue !==
-                  null
-                    ? "mcc"
-                    : categoryResult.classificationMethod,
+                const normalizedEmi =
+                  emiIndex >=
+                  0
+                    ? (
+                        row[
+                          emiIndex
+                        ] ??
+                        ""
+                      )
+                        .toLowerCase()
+                        .includes(
+                          "no cost"
+                        )
+                      ? "no_cost_emi"
+                      : (
+                            row[
+                              emiIndex
+                            ] ??
+                            ""
+                          )
+                            .toLowerCase()
+                            .includes(
+                              "emi"
+                            )
+                        ? "emi"
+                        : "regular"
+                    : "regular";
 
-                emiStatus:
-                  parsedEmiStatus,
+                const duplicate =
+                  existing.some(
+                    (
+                      transaction
+                    ) => {
+                      const sameReference =
+                        reference &&
+                        transaction.source_transaction_id ===
+                          reference;
 
-                emiPrincipal:
-                  parsedEmiStatus !==
-                  "regular"
-                    ? parsedPrincipal
-                    : null,
+                      if (
+                        sameReference
+                      ) {
+                        return true;
+                      }
 
-                emiInterestRate:
-                  parsedEmiStatus !==
-                  "regular"
-                    ? parsedInterestRate
-                    : null,
+                      return (
+                        transaction.merchant
+                          .trim()
+                          .toLowerCase() ===
+                          merchant
+                            .trim()
+                            .toLowerCase() &&
+                        Math.abs(
+                          Number(
+                            transaction.amount
+                          )
+                        ) ===
+                          amount &&
+                        transaction.transaction_date ===
+                          date
+                      );
+                    }
+                  );
 
-                emiInterest:
-                  parsedEmiStatus !==
-                  "regular"
-                    ? parsedInterest
-                    : null,
-
-                emiProcessingFee:
-                  parsedEmiStatus !==
-                  "regular"
-                    ? parsedProcessingFee
-                    : null,
-
-                gstOnProcessingFee:
-                  parsedEmiStatus !==
-                  "regular"
-                    ? parsedGstProcessing
-                    : null,
-
-                gstOnInterest:
-                  parsedEmiStatus !==
-                  "regular"
-                    ? parsedGstInterest
-                    : null,
-
-                emiOtherFees:
-                  parsedEmiStatus !==
-                  "regular"
-                    ? parsedOtherFees
-                    : null,
-
-                emiNumber:
-                  parsedEmiStatus !==
-                  "regular"
-                    ? parsedEmiNumber
-                    : null,
-
-                totalEmis:
-                  parsedEmiStatus !==
-                  "regular"
-                    ? parsedTotalEmis
-                    : null,
-
-                emiTotalPayable:
-                  parsedEmiStatus !==
-                  "regular"
-                    ? parsedTotalPayable
-                    : null,
-
-                emiStartDate:
-                  parsedEmiStatus !==
-                  "regular"
-                    ? parsedEmiStartDate
-                    : null,
-
-                emiEndDate:
-                  parsedEmiStatus !==
-                  "regular"
-                    ? parsedEmiEndDate
-                    : null,
-
-                totalTransactionCost:
-                  parsedTotalPayable ??
-                  normalizedAmount,
-
-                rawValues:
-                  row,
-
-                duplicate:
-                  sourceDuplicate ||
-                  broaderDuplicate,
-
-                selected:
-                  !sourceDuplicate &&
-                  !broaderDuplicate &&
-                  !hasError,
-
-                error:
-                  hasError,
-              });
-            }
-          );
-
-        if (
-          parsedRows.length ===
-          0
-        ) {
-          throw new Error(
-            "No transaction rows could be read from this statement."
-          );
-        }
-
-        const {
-          data: batch,
-          error:
-            batchError,
-        } =
-          await supabase
-            .from(
-              "transaction_import_batches"
+                return {
+                  date,
+                  merchant,
+                  amount,
+                  category:
+                    inferredCategory,
+                  mcc:
+                    normalizedMcc,
+                  emiStatus:
+                    normalizedEmi as
+                      | "regular"
+                      | "emi"
+                      | "no_cost_emi",
+                  transactionType:
+                    normalizedType as
+                      | "purchase"
+                      | "refund"
+                      | "reversal",
+                  reference,
+                  duplicate,
+                  selected:
+                    !duplicate,
+                };
+              }
             )
-            .insert({
-              user_id:
-                user.id,
-
-              profile_id:
-                currentProfile.id,
-
-              card_id:
-                selectedImportCardId,
-
-              source_type:
-                "statement_csv",
-
-              status:
-                "review_required",
-
-              transactions_found:
-                parsedRows.length,
-
-              transactions_skipped:
-                parsedRows.filter(
-                  (
-                    row
-                  ) =>
-                    row.duplicate
-                ).length,
-            })
-            .select(
-              "id"
-            )
-            .single();
-
-        if (
-          batchError
-        ) {
-          throw batchError;
-        }
-
-        setImportBatchId(
-          batch.id
-        );
+            .filter(
+              (
+                row
+              ) =>
+                row.merchant &&
+                row.amount >
+                  0 &&
+                row.date
+            );
 
         setImportRows(
-          parsedRows
+          mapped
         );
 
-        const readyRows =
-          parsedRows.filter(
-            (
-              row
-            ) =>
-              !row.error &&
-              !row.duplicate
-          ).length;
-
         setSuccessMessage(
-          `${parsedRows.length} transaction${
-            parsedRows.length ===
-            1
-              ? ""
-              : "s"
-          } found. ${readyRows} ready for review.`
+          `${mapped.length} transactions found. Review before importing.`
         );
       } catch (err) {
         console.error(
-          "Statement import error:",
           err
         );
 
-        const message =
-          err &&
-          typeof err ===
-            "object" &&
-          "message" in err
-            ? String(
-                (
-                  err as {
-                    message: unknown;
-                  }
-                ).message
-              )
-            : null;
-
         setError(
-          message ||
-            "Unable to process this statement."
+          err instanceof Error
+            ? err.message
+            : "Unable to process the statement."
         );
       } finally {
         event.target.value =
@@ -3837,70 +2464,62 @@ export default function SpendPage() {
       }
     };
 
-  const toggleImportRow = (
-    rowNumber: number
-  ) => {
-    setImportRows(
-      (current) =>
-        current.map(
-          (row) =>
-            row.rowNumber ===
-            rowNumber
-              ? {
-                  ...row,
-                  selected:
-                    row.error ||
-                    row.duplicate
-                      ? false
-                      : !row.selected,
-                }
-              : row
-        )
+  const toggleImportRow =
+    (
+      index: number
+    ) => {
+      setImportRows(
+        (
+          current
+        ) =>
+          current.map(
+            (
+              row,
+              rowIndex
+            ) =>
+              rowIndex ===
+              index
+                ? {
+                    ...row,
+                    selected:
+                      row.duplicate
+                        ? false
+                        : !row.selected,
+                  }
+                : row
+          )
+      );
+    };
+
+  const importSelected =
+    importRows.filter(
+      (
+        row
+      ) =>
+        row.selected &&
+        !row.duplicate
     );
-  };
 
-  const handleImportTransactions =
+  const handleImport =
     async () => {
-      const currentProfile =
-        activeProfile;
-
       if (
-        !currentProfile?.id
+        !activeProfile?.id ||
+        !importCardId
       ) {
-        setError(
-          "No active profile is available."
-        );
         return;
       }
 
       if (
-        !selectedImportCardId
-      ) {
-        setError(
-          "Please select the card represented by the statement."
-        );
-        return;
-      }
-
-      const rowsToImport =
-        importRows.filter(
-          (row) =>
-            row.selected &&
-            !row.error &&
-            !row.duplicate
-        );
-
-      if (
-        rowsToImport.length ===
+        importSelected.length ===
         0
       ) {
         setError(
-          "There are no transactions selected for import."
+          "Select at least one transaction to import."
         );
         return;
       }
 
-      setImportingStatement(
+      setImporting(
         true
       );
 
@@ -3926,131 +2545,60 @@ export default function SpendPage() {
         }
 
         const payload =
-          await Promise.all(
-            rowsToImport.map(
-              async (
-                row
-              ) => {
-                const fingerprint =
-                  await createTransactionFingerprint({
-                    cardId:
-                      selectedImportCardId,
+          importSelected.map(
+            (
+              row
+            ) => ({
+              user_id:
+                user.id,
 
-                    transactionDate:
-                      row.transactionDate,
+              profile_id:
+                activeProfile.id,
 
-                    amount:
-                      row.amount,
+              card_id:
+                importCardId,
 
-                    merchant:
-                      row.merchant,
+              merchant:
+                row.merchant,
 
-                    transactionType:
-                      row.transactionType,
-                  });
+              merchant_raw:
+                row.merchant,
 
-                return {
-                  user_id:
-                    user.id,
+              amount:
+                row.amount,
 
-                  profile_id:
-                    currentProfile.id,
+              original_transaction_amount:
+                row.amount,
 
-                  card_id:
-                    selectedImportCardId,
+              currency_code:
+                activeProfile.currency_code,
 
-                  merchant:
-                    row.merchant,
+              category:
+                row.category,
 
-                  merchant_raw:
-                    row.merchantRaw,
+              mcc:
+                row.mcc,
 
-                  amount:
-                    row.amount,
+              classification_method:
+                row.mcc
+                  ? "mcc"
+                  : "statement",
 
-                  original_transaction_amount:
-                    row.originalTransactionAmount,
+              transaction_type:
+                row.transactionType,
 
-                  currency_code:
-                    currentProfile.currency_code,
+              emi_status:
+                row.emiStatus,
 
-                  category:
-                    row.category,
+              source_type:
+                "statement_csv",
 
-                  mcc:
-                    row.mcc,
+              source_transaction_id:
+                row.reference,
 
-                  mcc_description:
-                    row.mccDescription,
-
-                  classification_method:
-                    row.classificationMethod,
-
-                  payment_route:
-                    row.paymentRoute,
-
-                  transaction_type:
-                    row.transactionType,
-
-                  source_type:
-                    "statement_csv",
-
-                  source_transaction_id:
-                    row.sourceTransactionId,
-
-                  import_batch_id:
-                    importBatchId,
-
-                  original_transaction_id:
-                    null,
-
-                  emi_status:
-                    row.emiStatus,
-
-                  emi_principal:
-                    row.emiPrincipal,
-
-                  emi_interest_rate:
-                    row.emiInterestRate,
-
-                  emi_interest:
-                    row.emiInterest,
-
-                  emi_processing_fee:
-                    row.emiProcessingFee,
-
-                  gst_on_processing_fee:
-                    row.gstOnProcessingFee,
-
-                  gst_on_interest:
-                    row.gstOnInterest,
-
-                  emi_other_fees:
-                    row.emiOtherFees,
-
-                  emi_number:
-                    row.emiNumber,
-
-                  total_emis:
-                    row.totalEmis,
-
-                  emi_total_payable:
-                    row.emiTotalPayable,
-
-                  emi_start_date:
-                    row.emiStartDate,
-
-                  emi_end_date:
-                    row.emiEndDate,
-
-                  total_transaction_cost:
-                    row.totalTransactionCost,
-
-                  transaction_fingerprint:
-                    fingerprint,
-                };
-              }
-            )
+              transaction_date:
+                row.date,
+            })
           );
 
         const {
@@ -4066,7 +2614,7 @@ export default function SpendPage() {
               payload
             )
             .select(
-              "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, merchant_raw, mcc, mcc_description, classification_method, payment_route, transaction_type, source_type, source_transaction_id, emi_status, emi_principal, emi_interest_rate, emi_interest, emi_processing_fee, emi_tax, gst_on_processing_fee, gst_on_interest, emi_other_fees, emi_number, total_emis, emi_total_payable, emi_start_date, emi_end_date, original_transaction_amount, total_transaction_cost, reward_adjustment_amount, fee_waiver_adjustment_amount, original_transaction_id, transaction_fingerprint"
+              "id, merchant, amount, currency_code, category, transaction_date, notes, card_id, mcc, mcc_description, classification_method, payment_route, transaction_type, source_type, source_transaction_id, emi_status, reward_adjustment_amount, fee_waiver_adjustment_amount, original_transaction_id"
             );
 
         if (
@@ -4075,57 +2623,10 @@ export default function SpendPage() {
           throw insertError;
         }
 
-        if (
-          importBatchId
-        ) {
-          const {
-            error:
-              batchUpdateError,
-          } =
-            await supabase
-              .from(
-                "transaction_import_batches"
-              )
-              .update({
-                transactions_imported:
-                  data?.length ??
-                  0,
-
-                transactions_skipped:
-                  importRows.filter(
-                    (
-                      row
-                    ) =>
-                      row.duplicate
-                  ).length,
-
-                status:
-                  "completed",
-
-                completed_at:
-                  new Date().toISOString(),
-              })
-              .eq(
-                "id",
-                importBatchId
-              )
-              .eq(
-                "user_id",
-                user.id
-              );
-
-          if (
-            batchUpdateError
-          ) {
-            console.error(
-              "Import batch update error:",
-              batchUpdateError
-            );
-          }
-        }
-
         setTransactions(
-          (current) => [
+          (
+            current
+          ) => [
             ...((data ??
               []) as SpendTransaction[]),
             ...current,
@@ -4133,77 +2634,36 @@ export default function SpendPage() {
         );
 
         setImportRows(
-          (current) =>
+          (
+            current
+          ) =>
             current.filter(
-              (row) =>
-                !rowsToImport.some(
-                  (
-                    imported
-                  ) =>
-                    imported.rowNumber ===
-                    row.rowNumber
+              (
+                row
+              ) =>
+                !importSelected.includes(
+                  row
                 )
             )
         );
 
         setSuccessMessage(
-          `${
-            data?.length ??
-            0
-          } transaction${
-            data?.length ===
-            1
-              ? ""
-              : "s"
-          } imported successfully.`
+          `${data?.length ?? 0} transactions imported.`
         );
       } catch (err) {
         console.error(
-          "Transaction import save error:",
           err
         );
 
-        const message =
-          err &&
-          typeof err ===
-            "object" &&
-          "message" in err
-            ? String(
-                (
-                  err as {
-                    message: unknown;
-                  }
-                ).message
-              )
-            : null;
-
         setError(
-          message ||
-            "Unable to import the selected transactions."
+          err instanceof Error
+            ? err.message
+            : "Unable to import transactions."
         );
       } finally {
-        setImportingStatement(
+        setImporting(
           false
         );
-      }
-    };
-
-  const clearImport =
-    () => {
-      setImportRows([]);
-      setImportFileName("");
-      setImportBatchId(
-        null
-      );
-
-      setError("");
-      setSuccessMessage("");
-
-      if (
-        fileInputRef.current
-      ) {
-        fileInputRef.current.value =
-          "";
       }
     };
 
@@ -4212,121 +2672,54 @@ export default function SpendPage() {
   ) => {
     try {
       return new Intl.NumberFormat(
-        undefined,
+        "en-IN",
         {
           style:
             "currency",
-
           currency:
-            profile?.currency_code ??
+            activeProfile?.currency_code ??
             "INR",
-
           maximumFractionDigits: 2,
         }
       ).format(value);
     } catch {
       return `${
-        profile?.currency_code ??
-        ""
+        activeProfile?.currency_code ??
+        "INR"
       } ${value.toFixed(
         2
       )}`;
     }
   };
 
-  const getCardName = (
-    transaction: SpendTransaction
-  ) => {
-    if (
-      !transaction.card_id
-    ) {
-      return "No card";
-    }
-
-    const card =
-      cards.find(
-        (
-          item
-        ) =>
-          item.id ===
-          transaction.card_id
-      );
-
-    if (!card) {
-      return "Card";
-    }
-
-    return card.card_last_four
-      ? `${card.name} ···· ${card.card_last_four}`
-      : card.name;
-  };
-
-  const getTransactionTypeLabel =
-    (
-      type:
-        | string
-        | null
-        | undefined
-    ) =>
-      TRANSACTION_TYPES.find(
-        (
-          item
-        ) =>
-          item.value ===
-          type
-      )?.label ??
-      "Purchase";
-
-  const getEmiLabel = (
-    status:
-      | string
-      | null
-      | undefined
-  ) => {
-    if (
-      status ===
-      "no_cost_emi"
-    ) {
-      return "No-Cost EMI";
-    }
-
-    if (
-      status ===
-      "emi"
-    ) {
-      return "EMI";
-    }
-
-    return null;
-  };
-
   if (
     loadingProfiles ||
-    loadingCards ||
-    loadingTransactions
+    loading
   ) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[var(--background)] text-[var(--foreground)]">
         <p className="text-sm text-[var(--muted)]">
-          Loading spend tracking...
+          Loading spend intelligence...
         </p>
       </main>
     );
   }
 
-  if (!profile) {
+  if (
+    !activeProfile
+  ) {
     return (
       <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
         <CardIQHeader />
 
-        <div className="mx-auto max-w-4xl px-5 py-10 lg:px-8">
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-8 text-center shadow-sm">
+        <div className="mx-auto max-w-4xl px-5 py-10">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-8 text-center">
             <h1 className="text-xl font-semibold">
               No active profile
             </h1>
 
             <p className="mt-2 text-sm text-[var(--muted)]">
-              Select a profile before tracking spending.
+              Select a profile before tracking spend.
             </p>
 
             <button
@@ -4336,7 +2729,7 @@ export default function SpendPage() {
                   "/profiles"
                 )
               }
-              className="mt-5 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
+              className="mt-5 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white dark:bg-white dark:text-slate-950"
             >
               Switch Profile
             </button>
@@ -4346,631 +2739,712 @@ export default function SpendPage() {
     );
   }
 
-  const isAdjustment =
-    transactionType ===
-      "refund" ||
-    transactionType ===
-      "reversal";
-
   return (
     <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
       <CardIQHeader />
 
-      <div className="mx-auto max-w-6xl px-5 py-8 lg:px-8 lg:py-10">
-        {/* Header */}
+      <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8 lg:py-10">
+        {/* Hero */}
         <section className="mb-8">
-          <p className="mb-2 text-sm font-medium text-[var(--muted)]">
-            {profile.name} profile
-          </p>
-
-          <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+          <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
             <div>
+              <p className="mb-2 text-sm font-medium text-[var(--muted)]">
+                {activeProfile.name} profile
+              </p>
+
               <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
                 Track Spend
               </h1>
 
               <p className="mt-3 max-w-3xl text-base leading-7 text-[var(--muted)]">
-                Record and import transactions so CardIQ can track spend,
-                rewards, EMI costs and renewal-fee progress accurately.
+                See how your spending is using each card&apos;s rewards,
+                accelerated categories and annual fee-waiver thresholds.
               </p>
             </div>
 
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-5 py-4 shadow-sm">
-              <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
-                Net profile spend
-              </p>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() =>
+                  setShowImport(
+                    (
+                      current
+                    ) =>
+                      !current
+                  )
+                }
+                className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-2.5 text-sm font-semibold shadow-sm transition hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                Import statement
+              </button>
 
-              <p className="mt-1 text-2xl font-bold">
-                {formatAmount(
-                  totalSpend
-                )}
-              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  resetManualForm();
+                  setShowAddForm(
+                    true
+                  );
+                }}
+                className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
+              >
+                + Add transaction
+              </button>
             </div>
           </div>
         </section>
 
-        {/* Transaction sources */}
-        <section className="mb-8">
-          <div className="mb-4">
-            <h2 className="text-lg font-semibold">
-              Add transactions
-            </h2>
-
-            <p className="mt-1 text-sm text-[var(--muted)]">
-              Import your statement or record a transaction manually.
-            </p>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-3">
-            {/* Statement */}
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-lg dark:bg-slate-800">
-                ↑
-              </div>
-
-              <h3 className="mt-4 font-semibold">
-                Import statement
-              </h3>
-
-              <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-                Upload a CSV statement and review transactions before they
-                become part of your ledger.
+        {/* Filters */}
+        <section className="mb-8 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm sm:p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                Cards
               </p>
 
-              <div className="mt-5">
-                <label
-                  htmlFor="statement-card"
-                  className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[var(--muted)]"
-                >
-                  Statement card
-                </label>
-
-                <select
-                  id="statement-card"
-                  value={
-                    selectedImportCardId
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setSelectedImportCardId(
-                      event.target
-                        .value
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    toggleCard(
+                      "all"
                     )
                   }
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
-                >
-                  {cards.length ===
-                  0 ? (
-                    <option value="">
-                      No cards available
-                    </option>
-                  ) : (
-                    cards.map(
-                      (
-                        card
-                      ) => (
-                        <option
-                          key={
-                            card.id
-                          }
-                          value={
-                            card.id
-                          }
-                        >
-                          {
-                            card.name
-                          }
-                          {card.card_last_four
-                            ? ` ···· ${card.card_last_four}`
-                            : ""}
-                        </option>
-                      )
+                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                    selectedCards.includes(
+                      "all"
                     )
-                  )}
-                </select>
-              </div>
+                      ? "bg-slate-900 text-white dark:bg-white dark:text-slate-950"
+                      : "border border-[var(--border)] hover:bg-slate-100 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  All cards
+                </button>
 
-              <input
-                ref={
-                  fileInputRef
-                }
-                id="statement-file"
-                type="file"
-                accept=".csv,text/csv"
-                onChange={
-                  handleStatementFile
-                }
-                className="hidden"
-              />
-
-              <button
-                type="button"
-                onClick={() =>
-                  fileInputRef.current?.click()
-                }
-                disabled={
-                  cards.length ===
-                  0
-                }
-                className="mt-4 w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
-              >
-                Choose CSV statement
-              </button>
-
-              <p className="mt-2 text-xs text-[var(--muted)]">
-                PDF and Excel will use the secure document-processing layer in
-                the next ingestion stage.
-              </p>
-            </div>
-
-            {/* Connected cards */}
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-lg dark:bg-slate-800">
-                ↔
-              </div>
-
-              <h3 className="mt-4 font-semibold">
-                Connected cards
-              </h3>
-
-              <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-                Account Aggregator connections will feed the same transaction
-                and duplicate-detection system.
-              </p>
-
-              <div className="mt-5 space-y-2">
-                {cards.length ===
-                0 ? (
-                  <p className="text-xs text-[var(--muted)]">
-                    Add a card first.
-                  </p>
-                ) : (
-                  cards.map(
-                    (
-                      card
-                    ) => (
-                      <div
-                        key={
+                {cards.map(
+                  (
+                    card
+                  ) => (
+                    <button
+                      key={
+                        card.id
+                      }
+                      type="button"
+                      onClick={() =>
+                        toggleCard(
                           card.id
-                        }
-                        className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] px-3 py-2.5"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">
-                            {
-                              card.name
-                            }
-                          </p>
-
-                          <p className="text-xs text-[var(--muted)]">
-                            {
-                              card.bank
-                            }
-                            {card.card_last_four
-                              ? ` ···· ${card.card_last_four}`
-                              : ""}
-                          </p>
-                        </div>
-
-                        <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                          {formatConnectionStatus(
-                            card
-                          )}
-                        </span>
-                      </div>
-                    )
+                        )
+                      }
+                      className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                        selectedCards.includes(
+                          card.id
+                        ) &&
+                        !selectedCards.includes(
+                          "all"
+                        )
+                          ? "bg-slate-900 text-white dark:bg-white dark:text-slate-950"
+                          : "border border-[var(--border)] hover:bg-slate-100 dark:hover:bg-slate-800"
+                      }`}
+                    >
+                      {
+                        card.name
+                      }
+                      {card.card_last_four
+                        ? ` ···· ${card.card_last_four}`
+                        : ""}
+                    </button>
                   )
                 )}
               </div>
             </div>
 
-            {/* Manual */}
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-lg dark:bg-slate-800">
-                +
-              </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                Period
+              </span>
 
-              <h3 className="mt-4 font-semibold">
-                Add manually
-              </h3>
-
-              <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-                Add a purchase, EMI, refund or reversal when no statement or
-                connected source is available.
-              </p>
-
-              <button
-                type="button"
-                onClick={() =>
-                  window.scrollTo({
-                    top: 0,
-                    behavior:
-                      "smooth",
-                  })
+              <select
+                value={
+                  period
                 }
-                className="mt-5 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm font-semibold transition hover:bg-slate-100 dark:hover:bg-slate-800"
+                onChange={(
+                  event
+                ) =>
+                  setPeriod(
+                    event.target
+                      .value as PeriodOption
+                  )
+                }
+                className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm font-medium text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:ring-slate-700"
               >
-                Use manual entry below
-              </button>
+                <option value="this_month">
+                  This month
+                </option>
+
+                <option value="last_month">
+                  Last month
+                </option>
+
+                <option value="anniversary">
+                  Anniversary year
+                </option>
+              </select>
             </div>
           </div>
         </section>
 
-        {/* Import review */}
-        {importRows.length >
-          0 && (
-          <section className="mb-8 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm sm:p-8">
-            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
-              <div>
-                <h2 className="text-lg font-semibold">
-                  Review imported transactions
-                </h2>
+        {/* KPI */}
+        <section className="mb-8 grid gap-4 md:grid-cols-3">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+              {period ===
+              "this_month"
+                ? formatMonthLabel(
+                    referenceDate
+                  )
+                : period ===
+                    "last_month"
+                  ? "Last month"
+                  : "Selected cards"}
+            </p>
 
-                <p className="mt-1 text-sm text-[var(--muted)]">
-                  {importFileName ||
-                    "Imported statement"}
-                  {selectedImportCard
-                    ? ` · ${selectedImportCard.name}${
-                        selectedImportCard.card_last_four
-                          ? ` ···· ${selectedImportCard.card_last_four}`
-                          : ""
-                      }`
-                    : ""}
-                </p>
-              </div>
+            <p className="mt-2 text-3xl font-bold">
+              {formatAmount(
+                totalSpend
+              )}
+            </p>
 
-              <button
-                type="button"
-                onClick={
-                  clearImport
-                }
-                className="rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-semibold transition hover:bg-slate-100 dark:hover:bg-slate-800"
-              >
-                Clear import
-              </button>
-            </div>
-
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-xl bg-[var(--card-muted)] p-4">
-                <p className="text-xs uppercase tracking-wide text-[var(--muted)]">
-                  Transactions found
-                </p>
-
-                <p className="mt-1 text-xl font-bold">
-                  {
-                    importRows.length
-                  }
-                </p>
-              </div>
-
-              <div className="rounded-xl bg-[var(--card-muted)] p-4">
-                <p className="text-xs uppercase tracking-wide text-[var(--muted)]">
-                  Ready to import
-                </p>
-
-                <p className="mt-1 text-xl font-bold">
-                  {
-                    importSelectedCount
-                  }
-                </p>
-              </div>
-
-              <div className="rounded-xl bg-[var(--card-muted)] p-4">
-                <p className="text-xs uppercase tracking-wide text-[var(--muted)]">
-                  Potential duplicates
-                </p>
-
-                <p className="mt-1 text-xl font-bold">
-                  {
-                    importDuplicateCount
-                  }
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-5 overflow-x-auto rounded-xl border border-[var(--border)]">
-              <table className="w-full min-w-[980px] border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wide text-[var(--muted)]">
-                    <th className="px-4 py-3">
-                      Import
-                    </th>
-
-                    <th className="px-4 py-3">
-                      Date
-                    </th>
-
-                    <th className="px-4 py-3">
-                      Merchant
-                    </th>
-
-                    <th className="px-4 py-3">
-                      Category / MCC
-                    </th>
-
-                    <th className="px-4 py-3">
-                      Type
-                    </th>
-
-                    <th className="px-4 py-3 text-right">
-                      Amount
-                    </th>
-
-                    <th className="px-4 py-3">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {importRows.map(
-                    (
-                      row
-                    ) => (
-                      <tr
-                        key={
-                          row.rowNumber
-                        }
-                        className="border-b border-[var(--border)] last:border-b-0"
-                      >
-                        <td className="px-4 py-3">
-                          <input
-                            type="checkbox"
-                            checked={
-                              row.selected
-                            }
-                            disabled={
-                              Boolean(
-                                row.error ||
-                                  row.duplicate
-                              )
-                            }
-                            onChange={() =>
-                              toggleImportRow(
-                                row.rowNumber
-                              )
-                            }
-                            className="h-4 w-4 rounded border-slate-300"
-                          />
-                        </td>
-
-                        <td className="whitespace-nowrap px-4 py-3 text-[var(--muted)]">
-                          {
-                            row.transactionDate ||
-                            "—"
-                          }
-                        </td>
-
-                        <td className="max-w-[240px] px-4 py-3">
-                          <p className="truncate font-medium">
-                            {
-                              row.merchant
-                            }
-                          </p>
-
-                          {row.sourceTransactionId && (
-                            <p className="mt-1 truncate text-xs text-[var(--muted)]">
-                              Ref:{" "}
-                              {
-                                row.sourceTransactionId
-                              }
-                            </p>
-                          )}
-                        </td>
-
-                        <td className="px-4 py-3">
-                          <p>
-                            {
-                              row.category
-                            }
-                          </p>
-
-                          {row.mcc && (
-                            <p className="mt-1 text-xs text-[var(--muted)]">
-                              MCC{" "}
-                              {
-                                row.mcc
-                              }
-                              {row.mccDescription
-                                ? ` · ${row.mccDescription}`
-                                : ""}
-                            </p>
-                          )}
-                        </td>
-
-                        <td className="px-4 py-3">
-                          <p>
-                            {getTransactionTypeLabel(
-                              row.transactionType
-                            )}
-                          </p>
-
-                          {getEmiLabel(
-                            row.emiStatus
-                          ) && (
-                            <p className="mt-1 text-xs font-medium text-[var(--muted)]">
-                              {
-                                getEmiLabel(
-                                  row.emiStatus
-                                )
-                              }
-                            </p>
-                          )}
-                        </td>
-
-                        <td className="whitespace-nowrap px-4 py-3 text-right font-medium">
-                          {formatAmount(
-                            row.amount
-                          )}
-                        </td>
-
-                        <td className="px-4 py-3">
-                          {row.error ? (
-                            <span className="text-xs font-semibold text-red-600 dark:text-red-400">
-                              {row.error}
-                            </span>
-                          ) : row.duplicate ? (
-                            <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">
-                              Possible duplicate
-                            </span>
-                          ) : (
-                            <span className="text-xs font-semibold text-green-600 dark:text-green-400">
-                              Ready
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                onClick={
-                  clearImport
-                }
-                disabled={
-                  importingStatement
-                }
-                className="rounded-xl border border-[var(--border)] px-5 py-3 text-sm font-semibold transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-slate-800"
-              >
-                Cancel import
-              </button>
-
-              <button
-                type="button"
-                onClick={
-                  handleImportTransactions
-                }
-                disabled={
-                  importingStatement ||
-                  importSelectedCount ===
-                    0
-                }
-                className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
-              >
-                {importingStatement
-                  ? "Importing..."
-                  : `Import ${importSelectedCount} transaction${
-                      importSelectedCount ===
-                      1
-                        ? ""
-                        : "s"
-                    }`}
-              </button>
-            </div>
-          </section>
-        )}
-
-        {/* Manual transaction */}
-        <section className="mb-8 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm sm:p-8">
-          <div className="mb-6">
-            <h2 className="text-lg font-semibold">
-              {editingTransactionId
-                ? "Edit transaction"
-                : "Record a transaction"}
-            </h2>
-
-            <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-              Store enough transaction detail for CardIQ to evaluate rewards,
-              EMI costs, monthly limits and annual fee-waiver progress.
+            <p className="mt-2 text-sm text-[var(--muted)]">
+              Net tracked spend
             </p>
           </div>
 
-          <form
-            onSubmit={
-              handleSubmit
-            }
-            className="space-y-6"
-          >
-            <div className="grid gap-5 md:grid-cols-2">
-              {/* Merchant */}
-              <div>
-                <label
-                  htmlFor="merchant"
-                  className="mb-2 block text-sm font-semibold"
-                >
-                  Merchant
-                </label>
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+              Transactions
+            </p>
 
-                <input
-                  id="merchant"
-                  type="text"
-                  value={merchant}
-                  onChange={(
-                    event
-                  ) =>
-                    setMerchant(
-                      event.target
-                        .value
-                    )
-                  }
-                  placeholder="e.g. Amazon"
-                  required
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
-                />
+            <p className="mt-2 text-3xl font-bold">
+              {
+                visibleTransactions.length
+              }
+            </p>
+
+            <p className="mt-2 text-sm text-[var(--muted)]">
+              Across{" "}
+              {
+                selectedCardObjects.length
+              }{" "}
+              selected card
+              {
+                selectedCardObjects.length ===
+                1
+                  ? ""
+                  : "s"
+              }
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+              Categories
+            </p>
+
+            <p className="mt-2 text-3xl font-bold">
+              {
+                categorySummary.length
+              }
+            </p>
+
+            <p className="mt-2 text-sm text-[var(--muted)]">
+              Active spending categories
+            </p>
+          </div>
+        </section>
+
+        {/* Category spend */}
+        <section className="mb-8">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold">
+              Spend by category
+            </h2>
+
+            <p className="mt-1 text-sm text-[var(--muted)]">
+              See where your selected cards are being used.
+            </p>
+          </div>
+
+          {categorySummary.length ===
+          0 ? (
+            <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card)] p-8 text-center">
+              <p className="text-sm text-[var(--muted)]">
+                No spend recorded for this period.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {categorySummary.map(
+                (
+                  item
+                ) => {
+                  const percentage =
+                    totalSpend >
+                    0
+                      ? Math.min(
+                          100,
+                          Math.max(
+                            0,
+                            (
+                              item.amount /
+                              totalSpend
+                            ) *
+                              100
+                          )
+                        )
+                      : 0;
+
+                  return (
+                    <div
+                      key={
+                        item.category
+                      }
+                      className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-sm font-semibold">
+                          {
+                            item.category
+                          }
+                        </p>
+
+                        <p className="text-sm font-semibold">
+                          {formatAmount(
+                            item.amount
+                          )}
+                        </p>
+                      </div>
+
+                      <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                        <div
+                          className="h-full rounded-full bg-slate-900 dark:bg-white"
+                          style={{
+                            width: `${percentage}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                }
+              )}
+            </div>
+          )}
+        </section>
+
+        {/* Card intelligence */}
+        <section className="mb-8">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold">
+              Your cards
+            </h2>
+
+            <p className="mt-1 text-sm text-[var(--muted)]">
+              Reward and annual-threshold progress is kept separate for every
+              card.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            {cardSummaries.map(
+              (
+                summary
+              ) => {
+                const {
+                  card,
+                } = summary;
+
+                return (
+                  <div
+                    key={
+                      card.id
+                    }
+                    className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm"
+                  >
+                    <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-lg font-semibold">
+                            {
+                              card.name
+                            }
+                          </h3>
+
+                          {card.card_last_four && (
+                            <span className="text-sm text-[var(--muted)]">
+                              ····{" "}
+                              {
+                                card.card_last_four
+                              }
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="mt-1 text-sm text-[var(--muted)]">
+                          {
+                            card.bank
+                          }{" "}
+                          ·{" "}
+                          {
+                            card.variant ??
+                            card.network
+                          }
+                        </p>
+
+                        <p className="mt-3 text-2xl font-bold">
+                          {formatAmount(
+                            summary.monthSpend
+                          )}
+                        </p>
+
+                        <p className="mt-1 text-sm text-[var(--muted)]">
+                          {period ===
+                          "this_month"
+                            ? "This month's spend"
+                            : period ===
+                                "last_month"
+                              ? "Last month's spend"
+                              : "Spend in selected period"}{" "}
+                          ·{" "}
+                          {
+                            summary.transactionCount
+                          }{" "}
+                          transaction
+                          {
+                            summary.transactionCount ===
+                            1
+                              ? ""
+                              : "s"
+                          }
+                        </p>
+                      </div>
+
+                      <div className="w-full max-w-xl">
+                        <div className="mb-3 flex items-center justify-between">
+                          <p className="text-sm font-semibold">
+                            Accelerated rewards
+                          </p>
+
+                          <p className="text-sm font-bold">
+                            {formatAmount(
+                              summary.rewardTotal
+                            )}
+                          </p>
+                        </div>
+
+                        {summary.rewardBuckets.length ===
+                        0 ? (
+                          <div className="rounded-xl bg-[var(--card-muted)] p-4 text-sm text-[var(--muted)]">
+                            No accelerated reward bucket has been triggered for
+                            this period.
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {summary.rewardBuckets.map(
+                              (
+                                bucket
+                              ) => {
+                                const progress =
+                                  bucket.cap &&
+                                  bucket.cap >
+                                    0
+                                    ? Math.min(
+                                        100,
+                                        (
+                                          bucket.earned /
+                                          bucket.cap
+                                        ) *
+                                          100
+                                      )
+                                    : null;
+
+                                const remaining =
+                                  bucket.cap !==
+                                    null &&
+                                  bucket.cap >
+                                    0
+                                    ? Math.max(
+                                        0,
+                                        bucket.cap -
+                                          bucket.earned
+                                      )
+                                    : null;
+
+                                return (
+                                  <div
+                                    key={
+                                      `${card.id}-${bucket.periodKey ?? bucket.bucket}`
+                                    }
+                                    className="rounded-xl bg-[var(--card-muted)] p-4"
+                                  >
+                                    <div className="flex items-center justify-between gap-3">
+                                      <p className="text-sm font-semibold">
+                                        {
+                                          bucket.bucket
+                                        }
+                                      </p>
+
+                                      <p className="text-sm font-semibold">
+                                        {formatAmount(
+                                          bucket.earned
+                                        )}
+                                      </p>
+                                    </div>
+
+                                    {progress !==
+                                      null && (
+                                      <>
+                                        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+                                          <div
+                                            className="h-full rounded-full bg-slate-900 dark:bg-white"
+                                            style={{
+                                              width: `${progress}%`,
+                                            }}
+                                          />
+                                        </div>
+
+                                        <div className="mt-2 flex justify-between gap-3 text-xs text-[var(--muted)]">
+                                          <span>
+                                            {formatAmount(
+                                              bucket.earned
+                                            )}{" "}
+                                            of{" "}
+                                            {formatAmount(
+                                              bucket.cap ??
+                                                0
+                                            )}
+                                          </span>
+
+                                          <span>
+                                            {remaining !==
+                                            null
+                                              ? remaining >
+                                                0
+                                                ? `${formatAmount(
+                                                    remaining
+                                                  )} remaining`
+                                                : "Monthly cap reached"
+                                              : ""}
+                                          </span>
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                                );
+                              }
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mt-6 border-t border-[var(--border)] pt-6">
+                      <div className="grid gap-4 lg:grid-cols-2">
+                        <div>
+                          <p className="mb-3 text-sm font-semibold">
+                            Card spend categories
+                          </p>
+
+                          {summary.categories.length ===
+                          0 ? (
+                            <p className="text-sm text-[var(--muted)]">
+                              No category spend in this period.
+                            </p>
+                          ) : (
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              {summary.categories
+                                .slice(
+                                  0,
+                                  6
+                                )
+                                .map(
+                                  (
+                                    item
+                                  ) => (
+                                    <div
+                                      key={
+                                        item.category
+                                      }
+                                      className="flex items-center justify-between rounded-xl border border-[var(--border)] px-3 py-2.5"
+                                    >
+                                      <span className="text-sm text-[var(--muted)]">
+                                        {
+                                          item.category
+                                        }
+                                      </span>
+
+                                      <span className="text-sm font-semibold">
+                                        {formatAmount(
+                                          item.amount
+                                        )}
+                                      </span>
+                                    </div>
+                                  )
+                                )}
+                            </div>
+                          )}
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold">
+                                Annual fee waiver
+                              </p>
+
+                              <p className="mt-1 text-xs text-[var(--muted)]">
+                                Based on the card&apos;s anniversary period.
+                              </p>
+                            </div>
+
+                            {summary.isLifetimeFree && (
+                              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                                Lifetime Free
+                              </span>
+                            )}
+                          </div>
+
+                          {summary.isLifetimeFree ? (
+                            <div className="mt-4 rounded-xl bg-[var(--card-muted)] p-4">
+                              <p className="text-sm font-semibold">
+                                Renewal fee not applicable
+                              </p>
+
+                              <p className="mt-1 text-xs text-[var(--muted)]">
+                                This card is marked Lifetime Free.
+                              </p>
+                            </div>
+                          ) : summary.waiverThreshold !==
+                            null ? (
+                            <div className="mt-4 rounded-xl bg-[var(--card-muted)] p-4">
+                              <div className="flex items-end justify-between gap-3">
+                                <div>
+                                  <p className="text-2xl font-bold">
+                                    {formatAmount(
+                                      summary.anniversarySpend
+                                    )}
+                                  </p>
+
+                                  <p className="mt-1 text-xs text-[var(--muted)]">
+                                    of{" "}
+                                    {formatAmount(
+                                      summary.waiverThreshold
+                                    )}{" "}
+                                    required
+                                  </p>
+                                </div>
+
+                                <p className="text-sm font-semibold">
+                                  {summary.waiverRemaining !==
+                                  null
+                                    ? summary.waiverRemaining >
+                                      0
+                                      ? `${formatAmount(
+                                          summary.waiverRemaining
+                                        )} remaining`
+                                      : "Threshold reached"
+                                    : ""}
+                                </p>
+                              </div>
+
+                              <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+                                <div
+                                  className="h-full rounded-full bg-slate-900 dark:bg-white"
+                                  style={{
+                                    width: `${Math.min(
+                                      100,
+                                      summary.waiverProgress ??
+                                        0
+                                    )}%`,
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="mt-4 rounded-xl bg-[var(--card-muted)] p-4 text-sm text-[var(--muted)]">
+                              No annual fee-waiver threshold is configured for
+                              this card.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+            )}
+
+            {cardSummaries.length ===
+              0 && (
+              <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card)] p-8 text-center">
+                <p className="text-sm text-[var(--muted)]">
+                  Select at least one card to view its spend.
+                </p>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Import */}
+        {showImport && (
+          <section className="mb-8 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold">
+                  Import statement
+                </h2>
+
+                <p className="mt-1 text-sm text-[var(--muted)]">
+                  Upload a CSV, review the transactions and import only what you
+                  need.
+                </p>
               </div>
 
-              {/* Amount */}
+              <button
+                type="button"
+                onClick={() =>
+                  setShowImport(
+                    false
+                  )
+                }
+                className="text-sm font-semibold text-[var(--muted)]"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
               <div>
                 <label
-                  htmlFor="amount"
+                  htmlFor="import-card"
                   className="mb-2 block text-sm font-semibold"
                 >
-                  Amount ({profile.currency_code})
-                </label>
-
-                <input
-                  id="amount"
-                  type="number"
-                  inputMode="decimal"
-                  min="0.01"
-                  step="0.01"
-                  value={amount}
-                  onChange={(
-                    event
-                  ) =>
-                    setAmount(
-                      event.target
-                        .value
-                    )
-                  }
-                  placeholder="0.00"
-                  required
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
-                />
-              </div>
-
-              {/* Card */}
-              <div>
-                <label
-                  htmlFor="card"
-                  className="mb-2 block text-sm font-semibold"
-                >
-                  Card used
+                  Statement card
                 </label>
 
                 <select
-                  id="card"
-                  value={cardId}
+                  id="import-card"
+                  value={
+                    importCardId
+                  }
                   onChange={(
                     event
                   ) =>
-                    setCardId(
+                    setImportCardId(
                       event.target
                         .value
                     )
                   }
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700 dark:focus:ring-slate-700"
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm"
                 >
-                  <option value="">
-                    No card / cash
-                  </option>
-
                   {cards.map(
                     (
                       card
@@ -4995,878 +3469,673 @@ export default function SpendPage() {
                 </select>
               </div>
 
-              {/* Date */}
-              <div>
-                <label
-                  htmlFor="transaction-date"
-                  className="mb-2 block text-sm font-semibold"
-                >
-                  Transaction date
-                </label>
+              <input
+                ref={
+                  importInputRef
+                }
+                type="file"
+                accept=".csv,text/csv"
+                onChange={
+                  handleImportFile
+                }
+                className="hidden"
+              />
 
-                <input
-                  id="transaction-date"
-                  type="date"
-                  value={
-                    transactionDate
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setTransactionDate(
-                      event.target
-                        .value
-                    )
-                  }
-                  required
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
-                />
-              </div>
-
-              {/* Transaction type */}
-              <div>
-                <label
-                  htmlFor="transaction-type"
-                  className="mb-2 block text-sm font-semibold"
-                >
-                  Transaction type
-                </label>
-
-                <select
-                  id="transaction-type"
-                  value={
-                    transactionType
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    handleTransactionTypeChange(
-                      event.target
-                        .value
-                    )
-                  }
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
-                >
-                  {TRANSACTION_TYPES.map(
-                    (
-                      item
-                    ) => (
-                      <option
-                        key={
-                          item.value
-                        }
-                        value={
-                          item.value
-                        }
-                      >
-                        {
-                          item.label
-                        }
-                      </option>
-                    )
-                  )}
-                </select>
-              </div>
-
-              {/* Category */}
-              <div>
-                <label
-                  htmlFor="category"
-                  className="mb-2 block text-sm font-semibold"
-                >
-                  Category
-                </label>
-
-                <select
-                  id="category"
-                  value={
-                    category
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setCategory(
-                      event.target
-                        .value
-                    )
-                  }
-                  required
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
-                >
-                  {CATEGORIES.map(
-                    (
-                      item
-                    ) => (
-                      <option
-                        key={
-                          item
-                        }
-                        value={
-                          item
-                        }
-                      >
-                        {item}
-                      </option>
-                    )
-                  )}
-                </select>
-              </div>
-
-              {/* MCC */}
-              <div>
-                <label
-                  htmlFor="mcc"
-                  className="mb-2 block text-sm font-semibold"
-                >
-                  MCC
-                  <span className="ml-2 font-normal text-[var(--muted)]">
-                    Optional
-                  </span>
-                </label>
-
-                <input
-                  id="mcc"
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={
-                    4
-                  }
-                  value={mcc}
-                  onChange={(
-                    event
-                  ) =>
-                    setMcc(
-                      event.target.value
-                        .replace(
-                          /\D/g,
-                          ""
-                        )
-                        .slice(
-                          0,
-                          4
-                        )
-                    )
-                  }
-                  placeholder="e.g. 5812"
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm tracking-widest text-[var(--foreground)] outline-none placeholder:tracking-normal placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
-                />
-              </div>
-
-              {/* Payment route */}
-              <div>
-                <label
-                  htmlFor="payment-route"
-                  className="mb-2 block text-sm font-semibold"
-                >
-                  Payment route
-                </label>
-
-                <select
-                  id="payment-route"
-                  value={
-                    paymentRoute
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setPaymentRoute(
-                      event.target
-                        .value
-                    )
-                  }
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
-                >
-                  <option value="">
-                    Select payment route
-                  </option>
-
-                  {PAYMENT_ROUTES.map(
-                    (
-                      route
-                    ) => (
-                      <option
-                        key={
-                          route
-                        }
-                        value={
-                          route
-                        }
-                      >
-                        {route}
-                      </option>
-                    )
-                  )}
-                </select>
-              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  importInputRef.current?.click()
+                }
+                className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white dark:bg-white dark:text-slate-950"
+              >
+                Choose CSV
+              </button>
             </div>
 
-            {/* Original transaction */}
-            {isAdjustment && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900 dark:bg-amber-950/30">
-                <label
-                  htmlFor="original-transaction"
-                  className="mb-2 block text-sm font-semibold"
-                >
-                  Original transaction
-                </label>
+            {importRows.length >
+              0 && (
+              <div className="mt-6 overflow-x-auto rounded-xl border border-[var(--border)]">
+                <table className="w-full min-w-[900px] text-sm">
+                  <thead>
+                    <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wide text-[var(--muted)]">
+                      <th className="px-4 py-3">
+                        Import
+                      </th>
 
-                <select
-                  id="original-transaction"
-                  value={
-                    originalTransactionId
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setOriginalTransactionId(
-                      event.target
-                        .value
-                    )
-                  }
-                  required
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
-                >
-                  <option value="">
-                    Select original purchase
-                  </option>
+                      <th className="px-4 py-3">
+                        Date
+                      </th>
 
-                  {originalTransactionOptions
-                    .filter(
+                      <th className="px-4 py-3">
+                        Merchant
+                      </th>
+
+                      <th className="px-4 py-3">
+                        Category
+                      </th>
+
+                      <th className="px-4 py-3">
+                        Type
+                      </th>
+
+                      <th className="px-4 py-3 text-right">
+                        Amount
+                      </th>
+
+                      <th className="px-4 py-3">
+                        Status
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {importRows.map(
                       (
-                        transaction
-                      ) =>
-                        transaction.card_id ===
-                        (cardId ||
-                          null)
-                    )
-                    .map(
+                        row,
+                        index
+                      ) => (
+                        <tr
+                          key={
+                            `${row.date}-${row.merchant}-${index}`
+                          }
+                          className="border-b border-[var(--border)] last:border-0"
+                        >
+                          <td className="px-4 py-3">
+                            <input
+                              type="checkbox"
+                              checked={
+                                row.selected
+                              }
+                              disabled={
+                                row.duplicate
+                              }
+                              onChange={() =>
+                                toggleImportRow(
+                                  index
+                                )
+                              }
+                              className="h-4 w-4 rounded"
+                            />
+                          </td>
+
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {
+                              row.date
+                            }
+                          </td>
+
+                          <td className="px-4 py-3">
+                            <p className="font-medium">
+                              {
+                                row.merchant
+                              }
+                            </p>
+
+                            {row.mcc && (
+                              <p className="mt-1 text-xs text-[var(--muted)]">
+                                MCC{" "}
+                                {
+                                  row.mcc
+                                }
+                              </p>
+                            )}
+                          </td>
+
+                          <td className="px-4 py-3">
+                            {
+                              row.category
+                            }
+                          </td>
+
+                          <td className="px-4 py-3">
+                            <p>
+                              {
+                                row.transactionType
+                              }
+                            </p>
+
+                            {row.emiStatus !==
+                              "regular" && (
+                              <p className="mt-1 text-xs text-[var(--muted)]">
+                                {row.emiStatus ===
+                                "no_cost_emi"
+                                  ? "No-Cost EMI"
+                                  : "EMI"}
+                              </p>
+                            )}
+                          </td>
+
+                          <td className="px-4 py-3 text-right font-semibold">
+                            {formatAmount(
+                              row.amount
+                            )}
+                          </td>
+
+                          <td className="px-4 py-3">
+                            {row.duplicate ? (
+                              <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">
+                                Already recorded
+                              </span>
+                            ) : (
+                              <span className="text-xs font-semibold text-green-600 dark:text-green-400">
+                                Ready
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    )}
+                  </tbody>
+                </table>
+
+                <div className="flex flex-col-reverse gap-3 border-t border-[var(--border)] p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-[var(--muted)]">
+                    {
+                      importSelected.length
+                    }{" "}
+                    selected ·{" "}
+                    {
+                      importRows.filter(
+                        (
+                          row
+                        ) =>
+                          row.duplicate
+                      ).length
+                    }{" "}
+                    already recorded
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={
+                      handleImport
+                    }
+                    disabled={
+                      importing ||
+                      importSelected.length ===
+                        0
+                    }
+                    className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-slate-950"
+                  >
+                    {importing
+                      ? "Importing..."
+                      : `Import ${importSelected.length} transaction${
+                          importSelected.length ===
+                          1
+                            ? ""
+                            : "s"
+                        }`}
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Add transaction */}
+        {showAddForm && (
+          <section className="mb-8 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold">
+                  Add transaction
+                </h2>
+
+                <p className="mt-1 text-sm text-[var(--muted)]">
+                  Add the essentials first. EMI and classification details
+                  become part of the reward calculation.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddForm(
+                    false
+                  );
+                  resetManualForm();
+                }}
+                className="text-sm font-semibold text-[var(--muted)]"
+              >
+                Close
+              </button>
+            </div>
+
+            <form
+              onSubmit={
+                handleManualSubmit
+              }
+              className="mt-6 space-y-5"
+            >
+              <div className="grid gap-5 md:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-semibold">
+                    Merchant
+                  </label>
+
+                  <input
+                    value={
+                      merchant
+                    }
+                    onChange={(
+                      event
+                    ) =>
+                      setMerchant(
+                        event.target
+                          .value
+                      )
+                    }
+                    placeholder="e.g. Amazon"
+                    required
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold">
+                    Amount
+                  </label>
+
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={
+                      amount
+                    }
+                    onChange={(
+                      event
+                    ) =>
+                      setAmount(
+                        event.target
+                          .value
+                      )
+                    }
+                    placeholder="0.00"
+                    required
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold">
+                    Card
+                  </label>
+
+                  <select
+                    value={
+                      cardId
+                    }
+                    onChange={(
+                      event
+                    ) =>
+                      setCardId(
+                        event.target
+                          .value
+                      )
+                    }
+                    required
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm"
+                  >
+                    {cards.map(
                       (
-                        transaction
+                        card
                       ) => (
                         <option
                           key={
-                            transaction.id
+                            card.id
                           }
                           value={
-                            transaction.id
+                            card.id
                           }
                         >
                           {
-                            transaction.transaction_date
-                          }{" "}
-                          ·{" "}
-                          {
-                            transaction.merchant
-                          }{" "}
-                          ·{" "}
-                          {formatAmount(
-                            Number(
-                              transaction.amount
-                            )
-                          )}
+                            card.name
+                          }
+                          {card.card_last_four
+                            ? ` ···· ${card.card_last_four}`
+                            : ""}
                         </option>
                       )
                     )}
-                </select>
+                  </select>
+                </div>
 
-                <p className="mt-2 text-xs leading-5 text-amber-700 dark:text-amber-300">
-                  CardIQ will use this link to reverse the original transaction's
-                  spend and, through the reward engine, reverse associated rewards
-                  where applicable.
-                </p>
-              </div>
-            )}
+                <div>
+                  <label className="mb-2 block text-sm font-semibold">
+                    Date
+                  </label>
 
-            {/* EMI */}
-            <div className="border-t border-[var(--border)] pt-6">
-              <div className="mb-5">
-                <h3 className="text-sm font-semibold">
-                  EMI details
-                </h3>
-
-                <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
-                  EMI transactions often have different reward treatment and
-                  additional costs. Enter the values shown on your statement.
-                </p>
-              </div>
-
-              <div className="mb-5">
-                <label
-                  htmlFor="emi-status"
-                  className="mb-2 block text-sm font-semibold"
-                >
-                  EMI status
-                </label>
-
-                <select
-                  id="emi-status"
-                  value={
-                    emiStatus
-                  }
-                  onChange={(
-                    event
-                  ) => {
-                    const value =
-                      event.target
-                        .value as (typeof EMI_STATUSES)[number]["value"];
-
-                    setEmiStatus(
-                      value
-                    );
-
-                    if (
-                      value ===
-                      "regular"
-                    ) {
-                      resetEmiFields();
+                  <input
+                    type="date"
+                    value={
+                      transactionDate
                     }
-                  }}
-                  disabled={
-                    transactionType !==
-                    "purchase"
-                  }
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:focus:border-slate-500 dark:focus:ring-slate-700 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
-                >
-                  {EMI_STATUSES.map(
-                    (
-                      item
-                    ) => (
-                      <option
-                        key={
-                          item.value
-                        }
-                        value={
-                          item.value
-                        }
-                      >
-                        {
-                          item.label
-                        }
-                      </option>
-                    )
-                  )}
-                </select>
+                    onChange={(
+                      event
+                    ) =>
+                      setTransactionDate(
+                        event.target
+                          .value
+                      )
+                    }
+                    required
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold">
+                    Category
+                  </label>
+
+                  <select
+                    value={
+                      category
+                    }
+                    onChange={(
+                      event
+                    ) =>
+                      setCategory(
+                        event.target
+                          .value
+                      )
+                    }
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm"
+                  >
+                    {CATEGORIES.map(
+                      (
+                        item
+                      ) => (
+                        <option
+                          key={
+                            item
+                          }
+                          value={
+                            item
+                          }
+                        >
+                          {item}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold">
+                    Transaction type
+                  </label>
+
+                  <select
+                    value={
+                      transactionType
+                    }
+                    onChange={(
+                      event
+                    ) =>
+                      setTransactionType(
+                        event.target
+                          .value as (typeof TRANSACTION_TYPES)[number]["value"]
+                      )
+                    }
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm"
+                  >
+                    {TRANSACTION_TYPES.map(
+                      (
+                        item
+                      ) => (
+                        <option
+                          key={
+                            item.value
+                          }
+                          value={
+                            item.value
+                          }
+                        >
+                          {
+                            item.label
+                          }
+                        </option>
+                      )
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold">
+                    EMI
+                  </label>
+
+                  <select
+                    value={
+                      emiStatus
+                    }
+                    onChange={(
+                      event
+                    ) =>
+                      setEmiStatus(
+                        event.target
+                          .value as (typeof EMI_OPTIONS)[number]["value"]
+                      )
+                    }
+                    disabled={
+                      transactionType !==
+                      "purchase"
+                    }
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm disabled:opacity-50"
+                  >
+                    {EMI_OPTIONS.map(
+                      (
+                        item
+                      ) => (
+                        <option
+                          key={
+                            item.value
+                          }
+                          value={
+                            item.value
+                          }
+                        >
+                          {
+                            item.label
+                          }
+                        </option>
+                      )
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold">
+                    Payment route
+                  </label>
+
+                  <select
+                    value={
+                      paymentRoute
+                    }
+                    onChange={(
+                      event
+                    ) =>
+                      setPaymentRoute(
+                        event.target
+                          .value
+                      )
+                    }
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm"
+                  >
+                    <option value="">
+                      Select route
+                    </option>
+
+                    {PAYMENT_ROUTES.map(
+                      (
+                        route
+                      ) => (
+                        <option
+                          key={
+                            route
+                          }
+                          value={
+                            route
+                          }
+                        >
+                          {route}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold">
+                    MCC
+                    <span className="ml-2 font-normal text-[var(--muted)]">
+                      Optional
+                    </span>
+                  </label>
+
+                  <input
+                    inputMode="numeric"
+                    maxLength={4}
+                    value={
+                      mcc
+                    }
+                    onChange={(
+                      event
+                    ) =>
+                      setMcc(
+                        event.target.value
+                          .replace(
+                            /\D/g,
+                            ""
+                          )
+                          .slice(
+                            0,
+                            4
+                          )
+                      )
+                    }
+                    placeholder="5812"
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm"
+                  />
+                </div>
               </div>
 
-              {emiStatus !==
-                "regular" && (
-                <div className="grid gap-5 md:grid-cols-2">
-                  <div>
-                    <label
-                      htmlFor="emi-principal"
-                      className="mb-2 block text-sm font-semibold"
-                    >
-                      Principal amount
-                    </label>
-
-                    <input
-                      id="emi-principal"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={
-                        emiPrincipal
-                      }
-                      onChange={(
-                        event
-                      ) =>
-                        setEmiPrincipal(
-                          event.target
-                            .value
-                        )
-                      }
-                      placeholder="e.g. 50000"
-                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="emi-interest-rate"
-                      className="mb-2 block text-sm font-semibold"
-                    >
-                      Interest rate (%)
-                    </label>
-
-                    <input
-                      id="emi-interest-rate"
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.01"
-                      value={
-                        emiInterestRate
-                      }
-                      onChange={(
-                        event
-                      ) =>
-                        setEmiInterestRate(
-                          event.target
-                            .value
-                        )
-                      }
-                      placeholder="e.g. 15.99"
-                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="emi-interest"
-                      className="mb-2 block text-sm font-semibold"
-                    >
-                      Interest amount
-                    </label>
-
-                    <input
-                      id="emi-interest"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={
-                        emiInterest
-                      }
-                      onChange={(
-                        event
-                      ) =>
-                        setEmiInterest(
-                          event.target
-                            .value
-                        )
-                      }
-                      placeholder="e.g. 2400"
-                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="emi-processing-fee"
-                      className="mb-2 block text-sm font-semibold"
-                    >
-                      Processing fee
-                    </label>
-
-                    <input
-                      id="emi-processing-fee"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={
-                        emiProcessingFee
-                      }
-                      onChange={(
-                        event
-                      ) =>
-                        setEmiProcessingFee(
-                          event.target
-                            .value
-                        )
-                      }
-                      placeholder="e.g. 999"
-                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="gst-processing-fee"
-                      className="mb-2 block text-sm font-semibold"
-                    >
-                      GST on processing fee
-                    </label>
-
-                    <input
-                      id="gst-processing-fee"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={
-                        gstOnProcessingFee
-                      }
-                      onChange={(
-                        event
-                      ) =>
-                        setGstOnProcessingFee(
-                          event.target
-                            .value
-                        )
-                      }
-                      placeholder="e.g. 179.82"
-                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="gst-interest"
-                      className="mb-2 block text-sm font-semibold"
-                    >
-                      GST on interest
-                    </label>
-
-                    <input
-                      id="gst-interest"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={
-                        gstOnInterest
-                      }
-                      onChange={(
-                        event
-                      ) =>
-                        setGstOnInterest(
-                          event.target
-                            .value
-                        )
-                      }
-                      placeholder="e.g. 432"
-                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="emi-other-fees"
-                      className="mb-2 block text-sm font-semibold"
-                    >
-                      Other EMI fees
-                    </label>
-
-                    <input
-                      id="emi-other-fees"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={
-                        emiOtherFees
-                      }
-                      onChange={(
-                        event
-                      ) =>
-                        setEmiOtherFees(
-                          event.target
-                            .value
-                        )
-                      }
-                      placeholder="Optional"
-                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="emi-number"
-                      className="mb-2 block text-sm font-semibold"
-                    >
-                      EMI number
-                    </label>
-
-                    <input
-                      id="emi-number"
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={
-                        emiNumber
-                      }
-                      onChange={(
-                        event
-                      ) =>
-                        setEmiNumber(
-                          event.target
-                            .value
-                        )
-                      }
-                      placeholder="e.g. 1"
-                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="total-emis"
-                      className="mb-2 block text-sm font-semibold"
-                    >
-                      Total EMIs
-                    </label>
-
-                    <input
-                      id="total-emis"
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={
-                        totalEmis
-                      }
-                      onChange={(
-                        event
-                      ) =>
-                        setTotalEmis(
-                          event.target
-                            .value
-                        )
-                      }
-                      placeholder="e.g. 6"
-                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="emi-total-payable"
-                      className="mb-2 block text-sm font-semibold"
-                    >
-                      Total EMI payable
-                    </label>
-
-                    <input
-                      id="emi-total-payable"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={
-                        emiTotalPayable
-                      }
-                      onChange={(
-                        event
-                      ) =>
-                        setEmiTotalPayable(
-                          event.target
-                            .value
-                        )
-                      }
-                      placeholder="e.g. 63400"
-                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="emi-start-date"
-                      className="mb-2 block text-sm font-semibold"
-                    >
-                      EMI start date
-                    </label>
-
-                    <input
-                      id="emi-start-date"
-                      type="date"
-                      value={
-                        emiStartDate
-                      }
-                      onChange={(
-                        event
-                      ) =>
-                        setEmiStartDate(
-                          event.target
-                            .value
-                        )
-                      }
-                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="emi-end-date"
-                      className="mb-2 block text-sm font-semibold"
-                    >
-                      EMI end date
-                    </label>
-
-                    <input
-                      id="emi-end-date"
-                      type="date"
-                      value={
-                        emiEndDate
-                      }
-                      onChange={(
-                        event
-                      ) =>
-                        setEmiEndDate(
-                          event.target
-                            .value
-                        )
-                      }
-                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
-                    />
-                  </div>
+              {(transactionType ===
+                "refund" ||
+                transactionType ===
+                  "reversal") && (
+                <div className="rounded-xl bg-amber-50 p-4 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                  The refund/reversal will reduce net spend. The Rewards engine
+                  will use the linked original transaction when calculating the
+                  reward adjustment.
                 </div>
               )}
-            </div>
 
-            {/* Notes */}
-            <div>
-              <label
-                htmlFor="notes"
-                className="mb-2 block text-sm font-semibold"
-              >
-                Notes
-                <span className="ml-2 font-normal text-[var(--muted)]">
-                  Optional
-                </span>
-              </label>
-
-              <input
-                id="notes"
-                type="text"
-                value={
-                  notes
-                }
-                onChange={(
-                  event
-                ) =>
-                  setNotes(
-                    event.target
-                      .value
-                  )
-                }
-                placeholder="Optional note"
-                className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-700"
-              />
-            </div>
-
-            {/* Error */}
-            {error && (
-              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
-                {error}
-              </div>
-            )}
-
-            {successMessage && (
-              <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700 dark:border-green-900 dark:bg-green-950/30 dark:text-green-300">
-                {successMessage}
-              </div>
-            )}
-
-            {/* Actions */}
-            <div className="flex flex-col-reverse gap-3 border-t border-[var(--border)] pt-5 sm:flex-row sm:justify-end">
-              {editingTransactionId && (
-                <button
-                  type="button"
-                  onClick={
-                    resetForm
+              {error && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+                  {
+                    error
                   }
-                  disabled={
-                    saving
-                  }
-                  className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-5 py-3 text-sm font-semibold transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-slate-800"
-                >
-                  Cancel edit
-                </button>
+                </div>
               )}
 
-              <button
-                type="submit"
-                disabled={
-                  saving
-                }
-                className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
-              >
-                {saving
-                  ? editingTransactionId
-                    ? "Saving changes..."
-                    : "Saving transaction..."
-                  : editingTransactionId
-                    ? "Save changes"
-                    : "Record transaction"}
-              </button>
-            </div>
-          </form>
-        </section>
+              <div className="flex justify-end gap-3 border-t border-[var(--border)] pt-5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddForm(
+                      false
+                    );
+                    resetManualForm();
+                  }}
+                  className="rounded-xl border border-[var(--border)] px-5 py-3 text-sm font-semibold"
+                >
+                  Cancel
+                </button>
 
-        {/* Recent Transactions */}
-        <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm sm:p-8">
-          <div className="mb-6">
+                <button
+                  type="submit"
+                  disabled={
+                    savingTransaction
+                  }
+                  className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-slate-950"
+                >
+                  {savingTransaction
+                    ? "Saving..."
+                    : "Save transaction"}
+                </button>
+              </div>
+            </form>
+          </section>
+        )}
+
+        {/* Recent activity */}
+        <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
+          <div className="mb-5">
             <h2 className="text-lg font-semibold">
-              Recent transactions
+              Recent activity
             </h2>
 
             <p className="mt-1 text-sm text-[var(--muted)]">
-              Your latest transactions in the{" "}
-              {profile.name} profile.
+              Transactions across your selected cards.
             </p>
           </div>
 
-          {transactions.length ===
+          {selectedTransactions.length ===
           0 ? (
             <div className="rounded-xl border border-dashed border-[var(--border)] p-8 text-center">
-              <p className="text-sm font-medium">
+              <p className="text-sm text-[var(--muted)]">
                 No transactions recorded yet.
-              </p>
-
-              <p className="mt-2 text-xs text-[var(--muted)]">
-                Record a transaction or import a statement above.
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {transactions.map(
-                (
-                  transaction
-                ) => {
-                  const emiLabel =
-                    getEmiLabel(
-                      transaction.emi_status
-                    );
+            <div className="space-y-2">
+              {selectedTransactions
+                .slice(
+                  0,
+                  25
+                )
+                .map(
+                  (
+                    transaction
+                  ) => {
+                    const card =
+                      cards.find(
+                        (
+                          item
+                        ) =>
+                          item.id ===
+                          transaction.card_id
+                      );
 
-                  const isRefundOrReversal =
-                    transaction.transaction_type ===
-                      "refund" ||
-                    transaction.transaction_type ===
-                      "reversal";
-
-                  return (
-                    <div
-                      key={
-                        transaction.id
-                      }
-                      className="rounded-xl border border-[var(--border)] p-4"
-                    >
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    return (
+                      <div
+                        key={
+                          transaction.id
+                        }
+                        className="flex flex-col gap-2 rounded-xl border border-[var(--border)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                      >
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="truncate text-sm font-semibold">
+                            <p className="truncate text-sm font-semibold">
                               {
                                 transaction.merchant
                               }
-                            </h3>
+                            </p>
 
-                            {transaction.source_type &&
-                              transaction.source_type !==
-                                "manual" && (
+                            {transaction.emi_status &&
+                              transaction.emi_status !==
+                                "regular" && (
                                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                                  {transaction.source_type
-                                    .replace(
-                                      "statement_",
-                                      ""
-                                    )
-                                    .replace(
-                                      "_",
-                                      " "
-                                    )}
+                                  {transaction.emi_status ===
+                                  "no_cost_emi"
+                                    ? "No-Cost EMI"
+                                    : "EMI"}
                                 </span>
                               )}
-
-                            {emiLabel && (
-                              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                                {
-                                  emiLabel
-                                }
-                              </span>
-                            )}
-
-                            {isRefundOrReversal && (
-                              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
-                                {
-                                  getTransactionTypeLabel(
-                                    transaction.transaction_type
-                                  )
-                                }
-                              </span>
-                            )}
                           </div>
 
                           <p className="mt-1 text-xs text-[var(--muted)]">
@@ -5874,167 +4143,86 @@ export default function SpendPage() {
                               transaction.category
                             }{" "}
                             ·{" "}
-                            {getCardName(
-                              transaction
-                            )}
-                          </p>
-
-                          <p className="mt-1 text-xs text-[var(--muted)]">
                             {
-                              transaction.transaction_date
+                              card?.name
                             }
-
-                            {transaction.payment_route
-                              ? ` · ${transaction.payment_route}`
+                            {card?.card_last_four
+                              ? ` ···· ${card.card_last_four}`
                               : ""}
+                            {" · "}
+                            {
+                              formatDateLabel(
+                                transaction.transaction_date
+                              )
+                            }
                           </p>
 
                           {transaction.mcc && (
-                            <p className="mt-2 text-[11px] text-[var(--muted)]">
+                            <p className="mt-1 text-[11px] text-[var(--muted)]">
                               MCC{" "}
                               {
                                 transaction.mcc
                               }
-                              {transaction.mcc_description
-                                ? ` · ${transaction.mcc_description}`
+                              {transaction.payment_route
+                                ? ` · ${transaction.payment_route}`
                                 : ""}
                             </p>
                           )}
-
-                          {transaction.emi_status &&
-                            transaction.emi_status !==
-                              "regular" && (
-                              <div className="mt-2 text-[11px] text-[var(--muted)]">
-                                {transaction.emi_principal !=
-                                null
-                                  ? `Principal ${formatAmount(
-                                      Number(
-                                        transaction.emi_principal
-                                      )
-                                    )}`
-                                  : ""}
-
-                                {transaction.emi_number !=
-                                    null &&
-                                  transaction.total_emis !=
-                                    null
-                                  ? ` · EMI ${transaction.emi_number}/${transaction.total_emis}`
-                                  : ""}
-
-                                {transaction.emi_interest !=
-                                null
-                                  ? ` · Interest ${formatAmount(
-                                      Number(
-                                        transaction.emi_interest
-                                      )
-                                    )}`
-                                  : ""}
-                              </div>
-                            )}
-
-                          {transaction.original_transaction_id && (
-                            <p className="mt-2 text-[11px] text-[var(--muted)]">
-                              Linked to original transaction
-                            </p>
-                          )}
-
-                          {transaction.notes && (
-                            <p className="mt-2 text-xs text-[var(--muted)]">
-                              {
-                                transaction.notes
-                              }
-                            </p>
-                          )}
                         </div>
 
-                        <div className="flex items-center gap-3">
-                          <p
-                            className={`shrink-0 text-base font-semibold ${
-                              isRefundOrReversal
-                                ? "text-amber-700 dark:text-amber-300"
-                                : ""
-                            }`}
-                          >
-                            {isRefundOrReversal
-                              ? "−"
-                              : ""}
-
-                            {formatAmount(
+                        <p
+                          className={`shrink-0 text-sm font-semibold ${
+                            transaction.transaction_type ===
+                              "refund" ||
+                            transaction.transaction_type ===
+                              "reversal"
+                              ? "text-amber-700 dark:text-amber-300"
+                              : ""
+                          }`}
+                        >
+                          {transaction.transaction_type ===
+                              "refund" ||
+                          transaction.transaction_type ===
+                              "reversal"
+                            ? "−"
+                            : ""}
+                          {formatAmount(
+                            Math.abs(
                               Number(
                                 transaction.amount
                               )
-                            )}
-                          </p>
-
-                          <div className="relative">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setOpenMenuId(
-                                  openMenuId ===
-                                    transaction.id
-                                    ? null
-                                    : transaction.id
-                                )
-                              }
-                              className="flex h-9 w-9 items-center justify-center rounded-lg text-lg text-[var(--muted)] transition hover:bg-slate-100 hover:text-[var(--foreground)] dark:hover:bg-slate-800"
-                              aria-label={`Options for ${transaction.merchant}`}
-                            >
-                              ⋮
-                            </button>
-
-                            {openMenuId ===
-                              transaction.id && (
-                              <div className="absolute right-0 top-10 z-20 w-44 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] p-1 shadow-lg">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleEditTransaction(
-                                      transaction
-                                    )
-                                  }
-                                  className="block w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium transition hover:bg-slate-100 dark:hover:bg-slate-800"
-                                >
-                                  Edit transaction
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleDeleteTransaction(
-                                      transaction
-                                    )
-                                  }
-                                  disabled={
-                                    deletingTransactionId ===
-                                    transaction.id
-                                  }
-                                  className="block w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-red-950/30"
-                                >
-                                  {deletingTransactionId ===
-                                  transaction.id
-                                    ? "Deleting..."
-                                    : "Delete transaction"}
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
+                            )
+                          )}
+                        </p>
                       </div>
-                    </div>
-                  );
-                }
-              )}
+                    );
+                  }
+                )}
             </div>
           )}
         </section>
 
+        {/* Messages */}
+        {(error ||
+          successMessage) && (
+          <div className="pointer-events-none fixed bottom-5 left-1/2 z-50 w-[calc(100%-2rem)] max-w-xl -translate-x-1/2">
+            {error ? (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700 shadow-lg dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+                {error}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-green-200 bg-green-50 px-5 py-4 text-sm text-green-700 shadow-lg dark:border-green-900 dark:bg-green-950/40 dark:text-green-300">
+                {
+                  successMessage
+                }
+              </div>
+            )}
+          </div>
+        )}
+
         <footer className="mt-12 border-t border-[var(--border)] pt-6 text-xs text-[var(--muted)]">
           <div className="flex flex-col justify-between gap-2 sm:flex-row">
-            <span>
-              CardIQ
-            </span>
-
+            <span>CardIQ</span>
             <span>
               Make every card spend count.
             </span>
@@ -6043,51 +4231,4 @@ export default function SpendPage() {
       </div>
     </main>
   );
-}
-
-function getDateOffset(
-  dateString: string,
-  days: number
-): string {
-  const date =
-    new Date(
-      `${dateString}T00:00:00`
-    );
-
-  date.setDate(
-    date.getDate() + days
-  );
-
-  return `${date.getFullYear()}-${String(
-    date.getMonth() + 1
-  ).padStart(
-    2,
-    "0"
-  )}-${String(
-    date.getDate()
-  ).padStart(
-    2,
-    "0"
-  )}`;
-}
-
-function formatCurrencyValue(
-  value: number
-): string {
-  try {
-    return new Intl.NumberFormat(
-      "en-IN",
-      {
-        style:
-          "currency",
-        currency:
-          "INR",
-        maximumFractionDigits: 2,
-      }
-    ).format(value);
-  } catch {
-    return `₹${value.toFixed(
-      2
-    )}`;
-  }
 }
