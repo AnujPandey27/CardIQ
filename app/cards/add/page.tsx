@@ -12,6 +12,7 @@ import {
 } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import CardIQHeader from "@/components/CardIQHeader";
+import CardArtwork from "@/components/CardArtwork";
 import {
   useCardIQProfile,
 } from "@/components/ProfileProvider";
@@ -305,6 +306,19 @@ const BANKS: BankOption[] = [
           {
             name: "My Zone",
             networks: ["Visa"],
+          },
+        ],
+      },
+      {
+        name: "Scapia",
+        variants: [
+          {
+            name: "Scapia Mastercard",
+            networks: ["Mastercard"],
+          },
+          {
+            name: "Scapia RuPay",
+            networks: ["RuPay"],
           },
         ],
       },
@@ -835,6 +849,38 @@ const BANKS: BankOption[] = [
           {
             name: "Signet",
             networks: ["Visa"],
+          },
+        ],
+      },
+      {
+        name: "Scapia",
+        variants: [
+          {
+            name: "Scapia Visa",
+            networks: ["Visa"],
+          },
+          {
+            name: "Scapia RuPay",
+            networks: ["RuPay"],
+          },
+        ],
+      },
+    ],
+  },
+
+  {
+    name: "BOBCARD",
+    cards: [
+      {
+        name: "Scapia",
+        variants: [
+          {
+            name: "Scapia Visa",
+            networks: ["Visa"],
+          },
+          {
+            name: "Scapia RuPay",
+            networks: ["RuPay"],
           },
         ],
       },
@@ -2116,6 +2162,9 @@ function AddCardForm() {
             ? null
             : parsedWaiverThreshold;
 
+      let savedCardId: string | null =
+        isEditMode && editCardId ? editCardId : null;
+
       if (
         isEditMode &&
         editCardId
@@ -2231,6 +2280,7 @@ function AddCardForm() {
         if (insertError) {
           throw insertError;
         }
+        savedCardId = insertedCard.id;
 
         const {
           error: settingsError,
@@ -2269,6 +2319,21 @@ function AddCardForm() {
         if (settingsError) {
           throw settingsError;
         }
+      }
+
+      // Best-effort official issuer image discovery runs after the card is
+      // safely saved. It never blocks the save flow or publishes a candidate
+      // until an administrator confirms the exact card face and network.
+      if (savedCardId) {
+        void fetch("/api/card-artwork/discover", {
+          method: "POST",
+          credentials: "same-origin",
+          keepalive: true,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cardId: savedCardId }),
+        }).catch((discoveryError) => {
+          console.warn("Card artwork discovery could not be started:", discoveryError);
+        });
       }
 
       router.push("/dashboard");
@@ -2790,6 +2855,29 @@ function AddCardForm() {
                 </select>
               </div>
             )}
+
+            {/* Exact card-face preview. The neutral placeholder is used when
+                CardIQ has no verified image for this exact issuer/variant/network. */}
+            {(isManualBank ? manualBank.trim() : bank) &&
+              (isManualCard ? manualCardName.trim() : cardName) && (
+                <section className="rounded-2xl border border-[var(--border)] bg-[var(--card-muted)] p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold">Card image preview</p>
+                      <p className="mt-1 text-xs text-[var(--muted)]">
+                        Exact card-face artwork appears only when issuer, product, variant and network match. If unavailable, CardIQ checks public issuer pages after you save; any candidate is verified before it appears for everyone.
+                      </p>
+                    </div>
+                    <CardArtwork
+                      compact
+                      bank={isManualBank ? manualBank : bank}
+                      name={isManualCard ? manualCardName : cardName}
+                      variant={isManualVariant ? manualVariant : variant}
+                      network={hasSingleKnownNetwork ? availableNetworks[0] : network}
+                    />
+                  </div>
+                </section>
+              )}
 
             {/* Last 4 digits */}
             <div>
