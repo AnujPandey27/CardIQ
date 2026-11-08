@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import CardIQHeader from "@/components/CardIQHeader";
+import CardArtwork from "@/components/CardArtwork";
+import { cardArtworkKey } from "@/lib/card-artwork";
 import { useCardIQProfile } from "@/components/ProfileProvider";
 
 type Card = {
@@ -26,6 +28,7 @@ export default function CardsPage() {
   } = useCardIQProfile();
 
   const [cards, setCards] = useState<Card[]>([]);
+  const [artworkByKey, setArtworkByKey] = useState<Record<string, string>>({});
   const [loadingCards, setLoadingCards] = useState(true);
   const [error, setError] = useState("");
 
@@ -95,6 +98,23 @@ export default function CardsPage() {
       }
 
       setCards(data ?? []);
+
+      // The shared catalogue exposes only verified standalone card-face images.
+      // If the additive artwork migration has not been installed yet, cards
+      // continue to render the standard issuer/network placeholder.
+      const { data: artworkRows } = await supabase
+        .from("card_artwork_catalog")
+        .select("issuer_key, product_key, variant_key, network_key, image_url")
+        .eq("verification_status", "approved")
+        .eq("is_card_face", true);
+
+      const nextArtworkMap: Record<string, string> = {};
+      for (const row of artworkRows ?? []) {
+        nextArtworkMap[
+          [row.issuer_key, row.product_key, row.variant_key, row.network_key].join("::")
+        ] = row.image_url;
+      }
+      setArtworkByKey(nextArtworkMap);
       setLoadingCards(false);
     };
 
@@ -321,9 +341,18 @@ export default function CardsPage() {
                   className="relative rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm transition hover:brightness-95"
                 >
                   <div className="flex items-center gap-4">
-                    <div className="flex h-14 w-20 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-xs font-bold text-white dark:bg-slate-700">
-                      CARD
-                    </div>
+                    <CardArtwork
+                      bank={card.bank}
+                      name={card.name}
+                      variant={card.variant}
+                      network={card.network}
+                      imageUrl={artworkByKey[cardArtworkKey({
+                        bank: card.bank,
+                        name: card.name,
+                        variant: card.variant,
+                        network: card.network,
+                      })]}
+                    />
 
                     <div className="min-w-0 flex-1">
                       <h2 className="truncate font-semibold">
